@@ -5,6 +5,8 @@ import numpy as np
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
 from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
 from few_shot_keypoints.matcher import KeypointFeatureMatcher, MultiQueryKeypointFeatureMatcher
+from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer
+from few_shot_keypoints.featurizers.combined_featurizer import CombinedFeaturizer
 from tqdm import trange
 from dataclasses import dataclass
 import draccus
@@ -47,7 +49,9 @@ def get_statistics(dataset, dataset_indices: list, keypoint_index: int):
     query_images = [dataset[idx][0].unsqueeze(0) for idx in dataset_indices]
     query_keypoints = [dataset[idx][1][keypoint_index][0] for idx in dataset_indices]
 
-    matcher = MultiQueryKeypointFeatureMatcher(SDFeaturizer())
+    #matcher = MultiQueryKeypointFeatureMatcher(SDFeaturizer())
+    matcher = MultiQueryKeypointFeatureMatcher(ViTFeaturizer("facebook/dinov2-small", [-1]))
+    #matcher = MultiQueryKeypointFeatureMatcher(CombinedFeaturizer([SDFeaturizer(), ViTFeaturizer("facebook/dinov2-small", [11])]))
     for img, kp in zip(query_images, query_keypoints):
         matcher.add_reference_image(img, kp)
     ground_truth_keypoints, predictions = get_dataset_predictions(dataset, matcher, keypoint_index)
@@ -60,15 +64,15 @@ def get_statistics(dataset, dataset_indices: list, keypoint_index: int):
 @dataclass
 class Config:
     dataset_category: str = "train_test"
-    N_query_sets: int = 3
-    N_query_images: int = 2
+    N_query_sets: int = 4
+    N_query_images: int = 1
 
 @draccus.wrap()
 def main(config: Config):
     dataset = TorchCOCOKeypointsDataset(f"/home/tlips/Code/droid/data/SPair-71k/SPAIR_coco_{config.dataset_category}.json")
     np.random.seed(2025)
     print(f" running for {len(dataset[0][1])} keypoints")
-    file_name = f"results/SPAIR-query-sets/{config.dataset_category}_#q{config.N_query_images}_statistics.json"
+    file_name = f"results/SPAIR-query-sets/dino_{config.dataset_category}_#q{config.N_query_images}_statistics.json"
 
     for keypoint_index in trange(len(dataset[0][1])):
         print(f"keypoint index: {keypoint_index}")

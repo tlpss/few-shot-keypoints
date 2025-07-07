@@ -8,27 +8,41 @@ import numpy as np
 def concatentation_aggregator(hidden_states: list[torch.Tensor]) -> torch.Tensor:
     return torch.cat(hidden_states, dim=-1)
 
+
 class ViTFeaturizer:
     def __init__(self, hf_model_name: str, layers: list[int], 
-    layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor]):
+    layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
+    device: str = 'cuda'):
         self.model = AutoModel.from_pretrained(hf_model_name)
+        self.model.eval()
+        self.model.to(device)
         self.processor = AutoImageProcessor.from_pretrained(hf_model_name)
         # https://huggingface.co/facebook/dinov2-base/discussions/9 -> default resolution is 224,224 for Dinov2!
         #TODO: want to make this bigger?
         # self.processor = BitImageProcessor(size=(self.model.config.image_size, self.model.config.image_size),do_center_crop=False,do_rescale=True,do_normalize=True)
-        print(self.processor)
         self.layers = layers
         self.layer_aggregator = layer_aggregator
+        self.device = device
 
 
-    def extract_features(self, image: Image.Image):
-        assert isinstance(image, Image.Image)   
-        inputs = self.processor(images=image, return_tensors="pt")
-        print(inputs.pixel_values.shape)
-        features =  self.forward(inputs.pixel_values) # 1, H',W',D
 
+    # def extract_features(self, image: Image.Image):
+    #     assert isinstance(image, Image.Image)
+    #     inputs = self.processor(images=image, return_tensors="pt")
+
+    #     features =  self.forward(inputs.pixel_values) # 1, H',W',D
+
+    #     # upsample to the original image size
+    #     upsampled_features = torch.nn.functional.interpolate(features, size=(image.height, image.width), mode="bilinear", align_corners=False)
+    #     return upsampled_features
+    def extract_features(self, image: torch.Tensor):
+        assert len(image.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
+        image = image.to(self.device)
+        features = self.forward(image) # B,H',W',D
+        # reshape to [B,D,H',W']
+        features = features.permute(0,3,1,2)
         # upsample to the original image size
-        upsampled_features = torch.nn.functional.interpolate(features, size=(image.height, image.width), mode="bilinear", align_corners=False)
+        upsampled_features = torch.nn.functional.interpolate(features, size=(image.shape[2], image.shape[3]), mode="bilinear", align_corners=False)
         return upsampled_features
 
 
@@ -47,7 +61,7 @@ class ViTFeaturizer:
         # drop class token and reshape to 2D
         hidden_states = [hidden_states[i][:,1:,:] for i in range(len(hidden_states))] # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES, HIDDEN_SIZE]
         hidden_states = self.arrange_tokens_in_grid(hidden_states,width=images.shape[3],height=images.shape[2]) # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES_HEIGHT, N_PATCHES_WIDTH, HIDDEN_SIZE]
-        features =  self.layer_aggregator([hidden_states[i] for i in self.layers])
+        features =  self.layer_aggregator([hidden_states[i] for i in self.layers])  # B,H',W',D
         return features
 
 
@@ -61,8 +75,11 @@ if __name__ == "__main__":
         hf_model_name="facebook/dinov2-small",
         layers=[4,11],
         layer_aggregator=concatentation_aggregator,
+        device="cuda"
     )
     url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
     image = Image.open(requests.get(url, stream=True).raw)
+    image = featurizer.processor(images=image, return_tensors="pt").pixel_values
+    print(image.shape)
     # convert to torch tensor
     print(featurizer.extract_features(image).shape)

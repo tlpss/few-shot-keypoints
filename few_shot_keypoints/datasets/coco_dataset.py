@@ -53,7 +53,6 @@ class TorchCOCOKeypointsDataset:
 
         print(f"{detect_only_visible_keypoints=}")
 
-        self.random_crop_transform = None
         self.transform = transform
         self.dataset = self.prepare_dataset()  # idx: (image, list(keypoints/channel))
 
