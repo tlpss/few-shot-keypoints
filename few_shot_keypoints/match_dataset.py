@@ -2,7 +2,7 @@ import json
 import os
 from typing import List, Tuple
 import numpy as np
-from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
+from few_shot_keypoints.datasets.coco_dataset import COCOKeypointsDataset
 from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
 from few_shot_keypoints.matcher import KeypointFeatureMatcher, MultiQueryKeypointFeatureMatcher
 from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer
@@ -11,7 +11,7 @@ from tqdm import trange
 from dataclasses import dataclass
 import draccus
 
-def get_dataset_predictions(dataset: TorchCOCOKeypointsDataset, matcher: KeypointFeatureMatcher, keypoint_index: int):
+def get_dataset_predictions(dataset: COCOKeypointsDataset, matcher: KeypointFeatureMatcher, keypoint_index: int):
     ground_truth_keypoints = []
     predictions = []
     for i in trange(len(dataset)):
@@ -69,7 +69,7 @@ class Config:
 
 @draccus.wrap()
 def main(config: Config):
-    dataset = TorchCOCOKeypointsDataset(f"/home/tlips/Code/droid/data/SPair-71k/SPAIR_coco_{config.dataset_category}.json")
+    dataset = COCOKeypointsDataset(f"/home/tlips/Code/droid/data/SPair-71k/SPAIR_coco_{config.dataset_category}.json")
     np.random.seed(2025)
     print(f" running for {len(dataset[0][1])} keypoints")
     file_name = f"results/SPAIR-query-sets/dino_{config.dataset_category}_#q{config.N_query_images}_statistics.json"
