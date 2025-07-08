@@ -4,13 +4,15 @@ import torch
 from typing import Callable
 import requests
 import numpy as np
+from few_shot_keypoints.featurizers.base import BaseFeaturizer
+
 
 def concatentation_aggregator(hidden_states: list[torch.Tensor]) -> torch.Tensor:
     return torch.cat(hidden_states, dim=-1)
 
 
-class ViTFeaturizer:
-    def __init__(self, hf_model_name: str, layers: list[int], 
+class ViTFeaturizer(BaseFeaturizer):
+    def __init__(self, hf_model_name: str = "facebook/dinov2-small", layers: list[int] = [11], 
     layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
     device: str = 'cuda'):
         self.model = AutoModel.from_pretrained(hf_model_name)
@@ -26,16 +28,8 @@ class ViTFeaturizer:
 
 
 
-    # def extract_features(self, image: Image.Image):
-    #     assert isinstance(image, Image.Image)
-    #     inputs = self.processor(images=image, return_tensors="pt")
 
-    #     features =  self.forward(inputs.pixel_values) # 1, H',W',D
-
-    #     # upsample to the original image size
-    #     upsampled_features = torch.nn.functional.interpolate(features, size=(image.height, image.width), mode="bilinear", align_corners=False)
-    #     return upsampled_features
-    def extract_features(self, image: torch.Tensor):
+    def extract_features(self, image: torch.Tensor, **kwargs):
         assert len(image.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
         image = image.to(self.device)
         features = self.forward(image) # B,H',W',D

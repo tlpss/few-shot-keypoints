@@ -17,6 +17,8 @@ from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from diffusers import DDIMScheduler
 from diffusers import StableDiffusionPipeline
 
+from few_shot_keypoints.featurizers.base import BaseFeaturizer
+
 class MyUNet2DConditionModel(UNet2DConditionModel):
     def forward(
         self,
@@ -193,7 +195,7 @@ class OneStepSDPipeline(StableDiffusionPipeline):
         return unet_output
 
 
-class SDFeaturizer:
+class SDFeaturizer(BaseFeaturizer):
     def __init__(self, sd_id='stabilityai/stable-diffusion-2-1'):
         unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet")
         onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
