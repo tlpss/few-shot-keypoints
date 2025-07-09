@@ -27,13 +27,17 @@ class COCOKeypointsDataset:
     This parser also adds some constraints to the dataset beyond what is allowed in the COCO format.
      - There can be only one category per dataset 
      - There can be only one annotation per image.
-    so there can be at most one keypoint per image for each keypoint category.
+    so there can be at most one keypoint per image for each keypoint category (but none is possible, bc even if there is an instance, this kp could be occluded)
 
     You can specify a keypoint channel configuration, which will be used to filter the keypoints.
     If no configuration is specified, all keypoints will be used.
     If a configuration is specified, only the keypoints in the configuration will be used.
   
-    
+    Keypoint values (u,v) are consired in the image coordinate system, so the topleft corner of the image is (0,0),
+    and a keypoint on the center of the topleft pixel has coordinate (0.5,0.5).
+    This is my interpretation of the COCO docs, but other frameworks (eg) Detectron) seem to consider the keypoints as pixel indexed, and add 0.5 to go to image coords.
+    https://cocodataset.org/#format-results
+    https://github.com/facebookresearch/detectron2/blob/cd3a0f9bff06f8cf13552099504213f0d057c7e1/detectron2/data/datasets/coco.py#L168-L172
 
     The dataset builds an index during the init call that maps from each image_id to a list of all keypoints of all semantic types in the dataset.
     """
@@ -59,6 +63,12 @@ class COCOKeypointsDataset:
         print(f"{detect_only_visible_keypoints=}")
 
         self.transform = transform
+
+        with open(self.dataset_json_path, "r") as file:
+            data = json.load(file)
+        self.parsed_coco = CocoKeypointsDatasetParser(**data)
+        self.coco_category_dict: typing.Dict[int, CocoKeypointCategory] = {}
+        self.coco_img_dict: typing.Dict[int, CocoImage] = {}
         self.dataset = self.prepare_dataset()  # idx: (image, list(keypoints/channel))
 
     def __len__(self):
@@ -89,6 +99,8 @@ class COCOKeypointsDataset:
 
         orig_keypoints = self.dataset[index][1]
         orig_bbox = self.dataset[index][2]
+        orig_image_id = self.dataset[index][3]
+        orig_category_id = self.dataset[index][4]
 
         original_image_size = image.shape[:2]
         if self.transform:
@@ -98,17 +110,7 @@ class COCOKeypointsDataset:
             keypoints = orig_keypoints
             bbox = orig_bbox
 
-        # convert all keypoints to integers values.
-        # COCO keypoints can be floats if they specify the exact location of the keypoint (e.g. from CVAT)
-        # even though COCO format specifies zero-indexed integers (i.e. every keypoint in the [0,1]x [0.1] pixel box becomes (0,0)
-        # we convert them to ints here, as the heatmap generation will add a 0.5 offset to the keypoint location to center it in the pixel
-        # the distance metrics also operate on integer values.
 
-        # so basically from here on every keypoint is an int that represents the pixel-box in which the keypoint is located.
-        keypoints = [
-            [[math.floor(keypoint[0]), math.floor(keypoint[1])] for keypoint in channel_keypoints]
-            for channel_keypoints in keypoints
-        ]
         image = self.image_to_tensor_transform(image)
         return {
             "image": image,
@@ -117,6 +119,8 @@ class COCOKeypointsDataset:
             "original_image_size": original_image_size,
             "bbox": bbox,
             "original_bbox": orig_bbox,
+            "coco_image_id": orig_image_id,
+            "coco_category_id": orig_category_id,
         }
 
     def prepare_dataset(self):  # noqa: C901
@@ -125,59 +129,54 @@ class COCOKeypointsDataset:
         Returns:
             [img_path, [list of keypoints for each channel]]
         """
-        with open(self.dataset_json_path, "r") as file:
-            data = json.load(file)
-            parsed_coco = CocoKeypointsDatasetParser(**data)
+ 
+        for img in self.parsed_coco.images:
+            self.coco_img_dict[img.id] = img
 
-            img_dict: typing.Dict[int, CocoImage] = {}
-            for img in parsed_coco.images:
-                img_dict[img.id] = img
+        for category in self.parsed_coco.categories:
+            self.coco_category_dict[category.id] = category
 
-            category_dict: typing.Dict[int, CocoKeypointCategory] = {}
-            for category in parsed_coco.categories:
-                category_dict[category.id] = category
+        # keypoint configuration: simply enumerate all keypoints
+        assert len(self.parsed_coco.categories) == 1, "Only one category supported"
 
-            # keypoint configuration: simply enumerate all keypoints
-            assert len(parsed_coco.categories) == 1, "Only one category supported"
+        
+        available_keypoints = [keypoint for keypoint in self.parsed_coco.categories[0].keypoints]
+        if self.keypoint_channel_configuration is None:
+            self.keypoint_channel_configuration = [keypoint for keypoint in available_keypoints]
+        else:
+            # check if all keypoints are in the configuration
+            for keypoint in self.keypoint_channel_configuration:
+                assert keypoint in available_keypoints, f"Keypoint {keypoint} not found in available keypoints: {available_keypoints}"
 
-            
-            available_keypoints = [keypoint for keypoint in parsed_coco.categories[0].keypoints]
-            if self.keypoint_channel_configuration is None:
-                self.keypoint_channel_configuration = [keypoint for keypoint in available_keypoints]
-            else:
-                # check if all keypoints are in the configuration
-                for keypoint in self.keypoint_channel_configuration:
-                    assert keypoint in available_keypoints, f"Keypoint {keypoint} not found in available keypoints: {available_keypoints}"
+        print(f"{self.keypoint_channel_configuration=}")
 
-            print(f"{self.keypoint_channel_configuration=}")
+        # iterate over all annotations and create a dict {img_id: {semantic_type : [keypoints]}}
+        # make sure that each images has at most one annotation per semantic type
+        annotation_dict = defaultdict(list)  # {img_id: [annotations]}
+        for annotation in self.parsed_coco.annotations:
+            # add all keypoints from this annotation to the corresponding image in the dict
+            annotation_dict[annotation.image_id].append(annotation)
 
-            # iterate over all annotations and create a dict {img_id: {semantic_type : [keypoints]}}
-            # make sure that each images has at most one annotation per semantic type
-            annotation_dict = defaultdict(list)  # {img_id: [annotations]}
-            for annotation in parsed_coco.annotations:
-                # add all keypoints from this annotation to the corresponding image in the dict
-                annotation_dict[annotation.image_id].append(annotation)
+        # iterate over each image and all it's annotations
+        # filter the visible keypoints
+        # and group them by channel
+        dataset = []
+        for img_id, annotations in annotation_dict.items():
+            assert len(annotations) <= 1, "Each image should have at most one annotation per category"
+            annotation = annotations[0]
+            bbox = annotation.bbox
+            keypoints = annotation.keypoints
+            keypoints = self.split_list_in_keypoints(keypoints)
+            category = self.coco_category_dict[annotation.category_id]
+            img_channels_keypoints = [[] for _ in range(len(self.keypoint_channel_configuration))]
+            for semantic_type, keypoint in zip(category.keypoints, keypoints):
+                if self.is_keypoint_visible(keypoint) and self.is_keypoint_in_image(keypoint, (self.coco_img_dict[img_id].height, self.coco_img_dict[img_id].width)):
+                    channel_idx = self.get_keypoint_channel_index(semantic_type)
+                    if channel_idx > -1:
+                        img_channels_keypoints[channel_idx].append(keypoint[:2])
+            dataset.append([self.coco_img_dict[img_id].file_name, img_channels_keypoints, bbox, annotation.image_id, annotation.category_id])
 
-            # iterate over each image and all it's annotations
-            # filter the visible keypoints
-            # and group them by channel
-            dataset = []
-            for img_id, annotations in annotation_dict.items():
-                assert len(annotations) <= 1, "Each image should have at most one annotation per category"
-                annotation = annotations[0]
-                bbox = annotation.bbox
-                keypoints = annotation.keypoints
-                keypoints = self.split_list_in_keypoints(keypoints)
-                category = category_dict[annotation.category_id]
-                img_channels_keypoints = [[] for _ in range(len(self.keypoint_channel_configuration))]
-                for semantic_type, keypoint in zip(category.keypoints, keypoints):
-                    if self.is_keypoint_visible(keypoint) and self.is_keypoint_in_image(keypoint, (img_dict[img_id].height, img_dict[img_id].width)):
-                        channel_idx = self.get_keypoint_channel_index(semantic_type)
-                        if channel_idx > -1:
-                            img_channels_keypoints[channel_idx].append(keypoint[:2])
-                dataset.append([img_dict[img_id].file_name, img_channels_keypoints, bbox])
-
-            return dataset
+        return dataset
 
     def get_keypoint_channel_index(self, semantic_type: str) -> int:
         """
@@ -228,30 +227,29 @@ class COCOKeypointsDataset:
 if __name__ == "__main__":
     data_path = "/home/tlips/Code/droid/data/SPair-71k/SPAIR_coco_aeroplane_test.json"
     from few_shot_keypoints.datasets.augmentations import MultiChannelKeypointsCompose,  A
-    from few_shot_keypoints.datasets.transforms import revert_max_length_resize_and_pad_transform
+    from few_shot_keypoints.datasets.transforms import RESIZE_TRANSFORM, revert_resize_transform
     import cv2
 
-    res = 500
-    transform = MultiChannelKeypointsCompose([
-        A.LongestMaxSize(max_size=res, always_apply=True, interpolation=cv2.INTER_NEAREST),
-        A.PadIfNeeded(min_height=res, min_width=res, border_mode=cv2.BORDER_CONSTANT, value=0, always_apply=True),
-    ])
+    res = 512
+    transform = RESIZE_TRANSFORM
     dataset = COCOKeypointsDataset(data_path, transform=transform)
     for k, v in dataset[0].items():
         print(f"{k=}: {v=}")
     
     dataset_wo_transform = COCOKeypointsDataset(data_path, transform=None)
     
-    keypoints_orig = dataset_wo_transform[0]["keypoints"]
-    keypoints_trans = dataset[0]["keypoints"]
-    keypoints_trans_orig = revert_max_length_resize_and_pad_transform(keypoints_trans, dataset_wo_transform[0]["original_image_size"], (res, res))
+    keypoints_orig = [kp for channel in dataset_wo_transform[0]["keypoints"] for kp in channel]
+    keypoints_trans = [kp for channel in dataset[0]["keypoints"] for kp in channel]
+    keypoints_trans_orig = revert_resize_transform(keypoints_trans, dataset_wo_transform[0]["original_image_size"], (res, res))
 
     print(f"{keypoints_orig=}, {keypoints_trans=}, {keypoints_trans_orig=}")
+    print(dataset[0]["original_image_size"])
+
 
     for d in dataset:
-        kp_trans = d["keypoints"]
-        kp_trans_orig = revert_max_length_resize_and_pad_transform(kp_trans, d["original_image_size"], (res, res))
-        kp_orig = d["original_keypoints"]
+        kp_trans = [kp for channel in d["keypoints"] for kp in channel]
+        kp_trans_orig = revert_resize_transform(kp_trans, d["original_image_size"], (res, res))
+        kp_orig = [kp for channel in d["original_keypoints"] for kp in channel]
         assert kp_orig==kp_trans_orig, f"{kp_orig=}, {kp_trans_orig=}"
 
     print("all good")
