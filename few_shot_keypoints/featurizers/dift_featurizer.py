@@ -1,4 +1,4 @@
-""" taken from https://arxiv.org/pdf/2306.03881"""
+""" taken from https://arxiv.org/pdf/2306.03881 and slightly modified"""
 
 import os
 import gc
@@ -196,31 +196,52 @@ class OneStepSDPipeline(StableDiffusionPipeline):
 
 
 class SDFeaturizer(BaseFeaturizer):
-    def __init__(self, sd_id='stabilityai/stable-diffusion-2-1'):
+    """ 
+    This is taken from the paper:
+
+
+    with some changes:
+        - I use the base version of SD2.1, which was finetuned on 512x512 images but not on 768x768. This is to align better with DinoV2 large (518x518)
+
+
+    """
+    def __init__(self, sd_id='stabilityai/stable-diffusion-2-1-base',device='cuda'):
+        self.device = device
         unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet")
         onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
         onestep_pipe.vae.decoder = None
         onestep_pipe.scheduler = DDIMScheduler.from_pretrained(sd_id, subfolder="scheduler")
         gc.collect()
-        onestep_pipe = onestep_pipe.to("cuda")
+        onestep_pipe = onestep_pipe.to(device)
         onestep_pipe.enable_attention_slicing()
         onestep_pipe.enable_xformers_memory_efficient_attention()
         self.pipe = onestep_pipe
 
     @torch.no_grad()
     def extract_features(self,
-                img_tensor, # single image, [1,c,h,w]
+                img_tensor, 
                 prompt = "",
                 t=261,
                 up_ft_index=1,
                 ensemble_size=8):
+        """
+            img_tensor: [1,c,h,w]; (0,1) range, unnormalized.
+        """
         assert len(img_tensor.shape) == 4 # 1,c,h,w
         assert img_tensor.shape[0] == 1
-        img_tensor = img_tensor.repeat(ensemble_size, 1, 1, 1).cuda() # ensem, c, h, w
+
+        # copy tensor 
+        img_tensor = img_tensor.clone()
+
+        # normalize to [-1,1], because that is how SD was trained 
+        # cf https://github.com/huggingface/diffusers/blob/bc55b631fdf3d0961c27ec548b1155d1fccf0424/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_img2img.py#L115
+        img_tensor = img_tensor * 2 - 1
+
+        img_tensor = img_tensor.repeat(ensemble_size, 1, 1, 1).to(self.device)   # ensem, c, h, w
 
         prompt_embeds,neg_prompt_embeds = self.pipe.encode_prompt(
             prompt=prompt,
-            device='cuda',
+            device=self.device,
             num_images_per_prompt=1,
             do_classifier_free_guidance=False) # [1, 77, dim]
 
@@ -232,8 +253,12 @@ class SDFeaturizer(BaseFeaturizer):
             prompt_embeds=prompt_embeds)
         unet_ft = unet_ft_all['up_ft'][up_ft_index] # ensem, c, H//patch_size, W//patch_size
         unet_ft = unet_ft.mean(0, keepdim=True) # 1,c,H//patch_size,W//patch_size
-        # upsample to original size
+        
+        
+        # upsample to original size (latents are /8) 
         unet_ft = F.interpolate(unet_ft, size=(img_tensor.shape[2], img_tensor.shape[3]), mode='bilinear', align_corners=False) # 1,D,h,w
+
+
         return unet_ft
 
 

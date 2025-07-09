@@ -5,7 +5,7 @@ from typing import Callable
 import requests
 import numpy as np
 from few_shot_keypoints.featurizers.base import BaseFeaturizer
-
+from torchvision.transforms.functional import normalize
 
 def concatentation_aggregator(hidden_states: list[torch.Tensor]) -> torch.Tensor:
     return torch.cat(hidden_states, dim=-1)
@@ -18,7 +18,7 @@ class ViTFeaturizer(BaseFeaturizer):
         self.model = AutoModel.from_pretrained(hf_model_name)
         self.model.eval()
         self.model.to(device)
-        self.processor = AutoImageProcessor.from_pretrained(hf_model_name)
+        # self.processor = AutoImageProcessor.from_pretrained(hf_model_name)
         # https://huggingface.co/facebook/dinov2-base/discussions/9 -> default resolution is 224,224 for Dinov2!
         #TODO: want to make this bigger?
         # self.processor = BitImageProcessor(size=(self.model.config.image_size, self.model.config.image_size),do_center_crop=False,do_rescale=True,do_normalize=True)
@@ -32,7 +32,18 @@ class ViTFeaturizer(BaseFeaturizer):
     def extract_features(self, image: torch.Tensor, **kwargs):
         assert len(image.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
         image = image.to(self.device)
-        features = self.forward(image) # B,H',W',D
+
+        # find closest multiple of patch size, but do not force size or aspect ratio, this is responsability of the user.
+        patch_size = self.model.config.patch_size
+        new_height = image.shape[2] // patch_size * patch_size
+        new_width = image.shape[3] // patch_size * patch_size
+        patch_image = torch.nn.functional.interpolate(image, size=(new_height, new_width), mode="bilinear", align_corners=False)
+
+        # normalize to imagenet mean and std
+        # cf https://github.com/facebookresearch/dinov2/blob/main/dinov2/data/transforms.py#L63
+        patch_image = normalize(patch_image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+        features = self.forward(patch_image) # B,H',W',D
         # reshape to [B,D,H',W']
         features = features.permute(0,3,1,2)
         # upsample to the original image size
@@ -43,13 +54,7 @@ class ViTFeaturizer(BaseFeaturizer):
     def forward(self, images: torch.Tensor):
         assert len(images.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
 
-        # model uses embedding inerpolation to deal with different image sizes.
-        # check size matches model size
-        # print(image.shape)
-        # print(self.model.config.image_size)
-        # assert image.shape[2] == self.model.config.image_size
-        # assert image.shape[3] == self.model.config.image_size
-
+        # model uses embedding inerpolation to deal with different image sizes!
         outputs = self.model(pixel_values=images, output_hidden_states=True)
         hidden_states = outputs.hidden_states # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES, HIDDEN_SIZE]
         # drop class token and reshape to 2D
@@ -73,7 +78,11 @@ if __name__ == "__main__":
     )
     url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
     image = Image.open(requests.get(url, stream=True).raw)
-    image = featurizer.processor(images=image, return_tensors="pt").pixel_values
+    image = image.resize((518,620))
+    image = torch.tensor(np.array(image)).permute(2,0,1)
+    image = image / 255.0
+    image = image.unsqueeze(0)
+    image = image.to(featurizer.device)
     print(image.shape)
     # convert to torch tensor
     print(featurizer.extract_features(image).shape)
