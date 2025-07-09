@@ -50,6 +50,8 @@ class KeypointFeatureMatcher(BaseKeypointFeatureMatcher):
 
     def add_reference_image(self, image: torch.Tensor, keypoint: List[int]):
         self.validate_input(image)
+        keypoint = [round(k) for k in keypoint]
+        assert len(keypoint) == 2, "Keypoint must be a list of two integers"
         vector = self.feature_extractor.extract_features(image)[:,:,keypoint[1],keypoint[0]]
         self.reference_images.append(image)
         self.reference_image_keypoints.append(keypoint)
@@ -67,7 +69,7 @@ class KeypointFeatureMatcher(BaseKeypointFeatureMatcher):
 
         argmax = cos_map.argmax()
         _,v,u = torch.unravel_index(argmax, cos_map.shape)
-        return MatchingResult(u=int(u.item()), v=int(v.item()), score=float(cos_map[0,v,u].item()))
+        return MatchingResult(u=int(u.item()), v=int(v.item()), score=round(float(cos_map[0,v,u].item()), 4))
 
 
 
@@ -104,7 +106,7 @@ class MultiQueryKeypointFeatureMatcher(KeypointFeatureMatcher):
         # select the best match using the sum of similarities
         best_match = sorted(total_similarity_scores.items(), key=lambda x: x[1], reverse=True)[0]
         best_candidate, best_score = best_match
-        return MatchingResult(u=int(best_candidate[0]), v=int(best_candidate[1]), score=best_score)
+        return MatchingResult(u=int(best_candidate[0]), v=int(best_candidate[1]), score=round(best_score, 4))
 
 
 

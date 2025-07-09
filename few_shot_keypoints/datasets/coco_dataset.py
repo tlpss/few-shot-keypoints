@@ -9,12 +9,12 @@ from typing import List, Optional, Tuple
 import torch
 from torchvision.transforms import ToTensor
 
-from airo_dataset_tools.data_parsers.coco import CocoImage, CocoKeypointCategory, CocoKeypointsDataset as CocoKeypointsDatasetParser
+from airo_dataset_tools.data_parsers.coco import CocoImage, CocoKeypointCategory, CocoKeypointsDataset
 from skimage import io
 from few_shot_keypoints.datasets.augmentations import MultiChannelKeypointsCompose
 
 
-class COCOKeypointsDataset:
+class TorchCOCOKeypointsDataset:
     """Pytorch Dataset for COCO-formatted Keypoint dataset
 
     cf. https://cocodataset.org/#format-data for more information.
@@ -66,7 +66,7 @@ class COCOKeypointsDataset:
 
         with open(self.dataset_json_path, "r") as file:
             data = json.load(file)
-        self.parsed_coco = CocoKeypointsDatasetParser(**data)
+        self.parsed_coco = CocoKeypointsDataset(**data)
         self.coco_category_dict: typing.Dict[int, CocoKeypointCategory] = {}
         self.coco_img_dict: typing.Dict[int, CocoImage] = {}
         self.dataset = self.prepare_dataset()  # idx: (image, list(keypoints/channel))
@@ -232,11 +232,11 @@ if __name__ == "__main__":
 
     res = 512
     transform = RESIZE_TRANSFORM
-    dataset = COCOKeypointsDataset(data_path, transform=transform)
+    dataset = TorchCOCOKeypointsDataset(data_path, transform=transform)
     for k, v in dataset[0].items():
         print(f"{k=}: {v=}")
     
-    dataset_wo_transform = COCOKeypointsDataset(data_path, transform=None)
+    dataset_wo_transform = TorchCOCOKeypointsDataset(data_path, transform=None)
     
     keypoints_orig = [kp for channel in dataset_wo_transform[0]["keypoints"] for kp in channel]
     keypoints_trans = [kp for channel in dataset[0]["keypoints"] for kp in channel]
