@@ -4,7 +4,7 @@ import torch
 from typing import Callable
 import requests
 import numpy as np
-from few_shot_keypoints.featurizers.base import BaseFeaturizer
+from few_shot_keypoints.featurizers.base import BaseFeaturizer, FeaturizerCache
 from torchvision.transforms.functional import normalize
 
 def concatentation_aggregator(hidden_states: list[torch.Tensor]) -> torch.Tensor:
@@ -49,6 +49,7 @@ class ViTFeaturizer(BaseFeaturizer):
         upsampled_features = torch.nn.functional.interpolate(features, size=(image.shape[2], image.shape[3]), mode="bilinear", align_corners=False)
         return upsampled_features
 
+    @FeaturizerCache
     @torch.no_grad()
     def forward(self, images: torch.Tensor):
         assert len(images.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]

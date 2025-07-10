@@ -17,7 +17,7 @@ from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from diffusers import DDIMScheduler
 from diffusers import StableDiffusionPipeline
 
-from few_shot_keypoints.featurizers.base import BaseFeaturizer
+from few_shot_keypoints.featurizers.base import BaseFeaturizer, FeaturizerCache
 
 class MyUNet2DConditionModel(UNet2DConditionModel):
     def forward(
@@ -216,7 +216,8 @@ class SDFeaturizer(BaseFeaturizer):
         onestep_pipe.enable_attention_slicing()
         onestep_pipe.enable_xformers_memory_efficient_attention()
         self.pipe = onestep_pipe
-
+    
+    @FeaturizerCache
     @torch.no_grad()
     def extract_features(self,
                 img_tensor, 
