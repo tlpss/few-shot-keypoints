@@ -1,0 +1,1 @@
+# Low-effort keypoint detection

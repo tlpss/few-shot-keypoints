@@ -30,7 +30,7 @@ class FeaturizerCache:
             img = args[0]
             if self.last_image is not None and self.last_image.shape == img.shape and torch.allclose(self.last_image, img):
                 # using cached features
-                print(f"using cached features")
+                #print(f"using cached features")
                 return self.last_features
             else:
                 self.last_image = img.clone()

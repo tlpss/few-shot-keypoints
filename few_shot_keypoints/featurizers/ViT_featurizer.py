@@ -27,7 +27,7 @@ class ViTFeaturizer(BaseFeaturizer):
         self.device = device
 
 
-
+    @FeaturizerCache
     def extract_features(self, image: torch.Tensor, **kwargs):
         assert len(image.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
         image = image.to(self.device)
@@ -49,7 +49,6 @@ class ViTFeaturizer(BaseFeaturizer):
         upsampled_features = torch.nn.functional.interpolate(features, size=(image.shape[2], image.shape[3]), mode="bilinear", align_corners=False)
         return upsampled_features
 
-    @FeaturizerCache
     @torch.no_grad()
     def forward(self, images: torch.Tensor):
         assert len(images.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
