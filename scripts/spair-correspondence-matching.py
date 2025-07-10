@@ -6,8 +6,7 @@ and slightly adapted to this codebase
 import argparse
 import torch
 from torch.nn import functional as F
-import torchvision
-import torchvision
+import torchvision.transforms.functional as TF
 from tqdm import tqdm
 import numpy as np
 from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
@@ -16,6 +15,12 @@ import json
 from PIL import Image
 import torch.nn as nn
 
+
+def preprocess_image(img, img_size):
+    img = torch.from_numpy(np.array(img)).permute(2,0,1).unsqueeze(0)
+    img = TF.resize(img, img_size)
+    img = img /255.0
+    return img
 
 def main(args):
     for arg in vars(args):
@@ -57,33 +62,45 @@ def main(args):
  
     dift = SDFeaturizer()
 
-    print("saving all test images' features...")
-    os.makedirs(args.save_path, exist_ok=True)
-    for cat in tqdm(all_cats):
-        output_dict = {}
-        image_list = cat2img[cat]
-        for image_path in image_list:
-            img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
-            output_dict[image_path] = dift.extract_features(img,
-                                                prompt=cat,
-                                                t=args.t,
-                                                up_ft_index=args.up_ft_index,
-                                                ensemble_size=args.ensemble_size)
-        torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
+
+
+    # print("saving all test images' features...")
+    # os.makedirs(args.save_path, exist_ok=True)
+    # for cat in tqdm(all_cats):
+    #     output_dict = {}
+    #     image_list = cat2img[cat]
+    #     for image_path in tqdm(image_list[:2]):
+    #         img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
+    #         img = preprocess_image(img, args.img_size)
+    #         feat  =dift.extract_features(img,
+    #                                             prompt=f"a photo of a {cat}",
+    #                                             t=args.t,
+    #                                             up_ft_index=args.up_ft_index,
+    #                                             ensemble_size=args.ensemble_size).cpu()
+    #         # to float 16
+    #         output_dict[image_path] = feat.to(torch.float16)
+
+    #     torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
 
     total_pck = []
     all_correct = 0
     all_total = 0
 
-    for cat in all_cats:
+    for cat in tqdm(all_cats, desc="SPAIR"):
         cat_list = cat2json[cat]
-        output_dict = torch.load(os.path.join(args.save_path, f'{cat}.pth'))
+        # output_dict = torch.load(os.path.join(args.save_path, f'{cat}.pth'))
 
         cat_pck = []
         cat_correct = 0
         cat_total = 0
 
-        for json_path in tqdm(cat_list):
+        if args.num_pairs_per_category == -1:
+            iterable = tqdm(cat_list)
+        else:
+            iterable = tqdm(cat_list[:args.num_pairs_per_category])
+
+        for json_path in iterable:
+            iterable.set_description(f"Processing {cat}, running PCK: {cat_correct/(cat_total+1e-6):.2f}")
 
             with open(os.path.join(dataset_path, test_path, json_path)) as temp_f:
                 data = json.load(temp_f)
@@ -91,11 +108,33 @@ def main(args):
             src_img_size = data['src_imsize'][:2][::-1]
             trg_img_size = data['trg_imsize'][:2][::-1]
 
-            src_ft = output_dict[data['src_imname']]
-            trg_ft = output_dict[data['trg_imname']]
+            src_img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, data['src_imname']))
+            trg_img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, data['trg_imname']))
+            src_img = preprocess_image(src_img, args.img_size)
+            trg_img = preprocess_image(trg_img, args.img_size)
 
-            src_ft = nn.Upsample(size=src_img_size, mode='bilinear')(src_ft)
-            trg_ft = nn.Upsample(size=trg_img_size, mode='bilinear')(trg_ft)
+            # src_ft = output_dict[data['src_imname']]
+            # trg_ft = output_dict[data['trg_imname']]
+
+            # instead of precomputing all 
+
+            src_ft = dift.extract_features(src_img,
+                                            prompt=f"a photo of a {cat}",
+                                            t=args.t,
+                                            up_ft_index=args.up_ft_index,
+                                            ensemble_size=args.ensemble_size).cpu()
+            trg_ft = dift.extract_features(trg_img,
+                                            prompt=f"a photo of a {cat}",
+                                            t=args.t,
+                                            up_ft_index=args.up_ft_index,
+                                            ensemble_size=args.ensemble_size).cpu()
+            
+            # resize both to the original image size, as is done in the original code.
+            #src_ft = nn.Upsample(size=src_img_size, mode='bilinear')(src_ft)
+            #trg_ft = nn.Upsample(size=trg_img_size, mode='bilinear')(trg_ft)
+            src_ft = TF.resize(src_ft, src_img_size)
+            trg_ft = TF.resize(trg_ft, trg_img_size)
+
             h = trg_ft.shape[-2]
             w = trg_ft.shape[-1]
 
@@ -139,7 +178,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='SPair-71k Evaluation Script')
     parser.add_argument('--dataset_path', type=str, default='./data/SPair-71k/', help='path to spair dataset')
-    parser.add_argument('--save_path', type=str, default='scratch/lt453/spair_ft/', help='path to save features')
+    parser.add_argument('--save_path', type=str, default='/storage/tlips/scratch_spair_ft/', help='path to save features')
     # parser.add_argument('--dift_model', choices=['sd', 'adm'], default='sd', help="which dift version to use")
     parser.add_argument('--img_size', nargs='+', type=int, default=[768, 768],
                         help='''in the order of [width, height], resize input image
@@ -148,5 +187,6 @@ if __name__ == "__main__":
     parser.add_argument('--t', default=261, type=int, help='t for diffusion')
     parser.add_argument('--up_ft_index', default=1, type=int, help='which upsampling block to extract the ft map')
     parser.add_argument('--ensemble_size', default=8, type=int, help='ensemble size for getting an image ft map')
+    parser.add_argument('--num_pairs_per_category', default=-1, type=int, help='number of pairs to process per category')
     args = parser.parse_args()
     main(args)
