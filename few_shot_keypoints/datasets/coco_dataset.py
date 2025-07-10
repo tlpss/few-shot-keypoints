@@ -50,7 +50,6 @@ class TorchCOCOKeypointsDataset:
         detect_only_visible_keypoints: bool = True,
         keypoint_channel_configuration: Optional[List[str]] = None,
         transform: Optional[MultiChannelKeypointsCompose] = None,
-        **kwargs,
     ):
 
         self.image_to_tensor_transform = ToTensor()
@@ -61,6 +60,7 @@ class TorchCOCOKeypointsDataset:
         self.detect_only_visible_keypoints = detect_only_visible_keypoints
 
         print(f"{detect_only_visible_keypoints=}")
+        print(f" using transform: {transform}")
 
         self.transform = transform
 
@@ -244,6 +244,7 @@ if __name__ == "__main__":
 
     print(f"{keypoints_orig=}, {keypoints_trans=}, {keypoints_trans_orig=}")
     print(dataset[0]["original_image_size"])
+    print(dataset[0]["image"].shape)
 
 
     for d in dataset:
