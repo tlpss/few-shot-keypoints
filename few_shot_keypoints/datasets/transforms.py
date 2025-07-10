@@ -5,7 +5,7 @@ from few_shot_keypoints.datasets.augmentations import MultiChannelKeypointsCompo
 
 
 IMAGE_SIZE = 512
-RESIZE_TRANSFORM = MultiChannelKeypointsCompose([A.Resize(IMAGE_SIZE,IMAGE_SIZE)]) # A.Normalize(mean=(0,0,0), std=(1,1,1),max_pixel_value=255),ToTensorV2()])
+RESIZE_TRANSFORM = MultiChannelKeypointsCompose([A.Resize(IMAGE_SIZE,IMAGE_SIZE,interpolation=cv2.INTER_CUBIC)]) # A.Normalize(mean=(0,0,0), std=(1,1,1),max_pixel_value=255),ToTensorV2()])
 MAX_LENGTH_RESIZE_AND_PAD_TRANSFORM = MultiChannelKeypointsCompose([A.LongestMaxSize(max_size=IMAGE_SIZE), A.PadIfNeeded(min_height=IMAGE_SIZE, min_width=IMAGE_SIZE, border_mode=cv2.BORDER_CONSTANT, value=0)]) # A.Normalize(mean=(0,0,0), std=(1,1,1),max_pixel_value=255),ToTensorV2()])
 
 
