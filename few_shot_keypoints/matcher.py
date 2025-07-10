@@ -53,6 +53,8 @@ class KeypointFeatureMatcher(BaseKeypointFeatureMatcher):
         keypoint = [round(k) for k in keypoint]
         assert len(keypoint) == 2, "Keypoint must be a list of two integers"
         vector = self.feature_extractor.extract_features(image)[:,:,keypoint[1],keypoint[0]]
+        # make sure the feature map can be gc'd
+        vector = torch.clone(vector)
         self.reference_images.append(image)
         self.reference_image_keypoints.append(keypoint)
         self.reference_vectors.append(vector)

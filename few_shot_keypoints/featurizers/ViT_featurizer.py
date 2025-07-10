@@ -12,7 +12,7 @@ def concatentation_aggregator(hidden_states: list[torch.Tensor]) -> torch.Tensor
 
 
 class ViTFeaturizer(BaseFeaturizer):
-    def __init__(self, hf_model_name: str = "facebook/dinov2-small", layers: list[int] = [11], 
+    def __init__(self, hf_model_name: str = "facebook/dinov2-small", layers: list[int] = [-1], 
     layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
     device: str = 'cuda'):
         self.model = AutoModel.from_pretrained(hf_model_name)
@@ -25,7 +25,6 @@ class ViTFeaturizer(BaseFeaturizer):
         self.layers = layers
         self.layer_aggregator = layer_aggregator
         self.device = device
-
 
 
 
@@ -50,7 +49,7 @@ class ViTFeaturizer(BaseFeaturizer):
         upsampled_features = torch.nn.functional.interpolate(features, size=(image.shape[2], image.shape[3]), mode="bilinear", align_corners=False)
         return upsampled_features
 
-
+    @torch.no_grad()
     def forward(self, images: torch.Tensor):
         assert len(images.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
 
@@ -72,13 +71,13 @@ class ViTFeaturizer(BaseFeaturizer):
 if __name__ == "__main__":
     featurizer = ViTFeaturizer(
         hf_model_name="facebook/dinov2-small",
-        layers=[4,11],
+        layers=[11],
         layer_aggregator=concatentation_aggregator,
         device="cuda"
     )
     url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
     image = Image.open(requests.get(url, stream=True).raw)
-    image = image.resize((518,620))
+    image = image.resize((512,512))
     image = torch.tensor(np.array(image)).permute(2,0,1)
     image = image / 255.0
     image = image.unsqueeze(0)
