@@ -3,7 +3,7 @@ from airo_dataset_tools.data_parsers.coco import CocoInstanceAnnotation, CocoKey
 from pydantic import RootModel
 
 class CocoKeypointsResultAnnotation(CocoInstanceAnnotation):
-    keypoints: List[int]
+    keypoints: List[float]
     score: float # overall confidence, required by the COCO format.
     keypoint_scores: Optional[List[float]] = None # additional, optional field to store the confidence of the keypoints separately.
 
@@ -34,4 +34,6 @@ if __name__ == "__main__":
     }]
 
     dummy_dataset = CocoKeypointsResultDataset(dummy)
+
     print(dummy_dataset)
+    print(dummy_dataset[0])
