@@ -9,6 +9,7 @@ from torch.nn import functional as F
 import torchvision.transforms.functional as TF
 from tqdm import tqdm
 import numpy as np
+from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer
 from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
 import os
 import json
@@ -60,7 +61,8 @@ def main(args):
                 cat2img[cat].append(trg_imname)
 
  
-    dift = SDFeaturizer()
+    #dift = SDFeaturizer()
+    dift = ViTFeaturizer()
 
 
 

@@ -23,7 +23,7 @@ class Config:
     transform : str = "resize" # or "resize_max_and_pad"
     output_base_dir: str = "results/SPAIR-support-sets"
 
-@draccus.wrap()
+#@draccus.wrap()
 def match_dataset(config: Config):
 
     if config.transform == "resize":
@@ -64,4 +64,12 @@ def match_dataset(config: Config):
 
 
 if __name__ == "__main__":
-    match_dataset()
+    config = Config()
+    config.train_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-train_resized_512x256/tshirts-train.json"
+    config.test_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
+    config.output_base_dir = "results/aRTF-support-sets"
+    config.featurizer = "dino"
+    config.N_support_images = 1
+    config.seed = 2025
+    config.transform = "resize"
+    match_dataset(config)
