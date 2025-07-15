@@ -1,4 +1,5 @@
 import dataclasses
+from functools import partial
 from typing import Callable, List, Optional, Tuple
 from airo_dataset_tools.data_parsers.coco import CocoInstanceAnnotation, CocoKeypointsDataset
 from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
@@ -98,8 +99,8 @@ def match_keypoints(coco_dataset: CocoKeypointsDataset, coco_results_dataset: Co
             if vis_pred == 0:
                 pred_kp = None
 
-
-            matched_prediction = MatchedPredictionKeypoint(keypoint_category=kp_type, image_id=image_id, predicted_keypoint=pred_kp, gt_keypoint=gt_kp, gt_visible=vis_gt > 1.5, keypoint_score=score_pred, bbox=gt_annotation.bbox, size=gt_annotation.area)
+            is_gt_visible = vis_gt > 1.5 # 2 is visible, 1 is occluded, 0 is not in view.
+            matched_prediction = MatchedPredictionKeypoint(keypoint_category=kp_type, image_id=image_id, predicted_keypoint=pred_kp, gt_keypoint=gt_kp, gt_visible=is_gt_visible, keypoint_score=score_pred, bbox=gt_annotation.bbox, size=gt_annotation.area)
             matched_predictions.append(matched_prediction)
     
     return matched_predictions
@@ -115,9 +116,11 @@ def calculate_point_PCK(matched_predictions: List[MatchedPredictionKeypoint], th
     for prediction in matched_predictions:
         if prediction.gt_keypoint is None:
             # this is a FP
+            #n_total += 1
             continue
-        if visible_only and prediction.gt_visible == 0.0:
+        if visible_only and prediction.gt_visible is False:
             # these would be FPs because there is no GT keypoint here.
+            #n_total += 1
             continue
         n_total += 1
         if prediction.predicted_keypoint is not None: #otherwise, this would be a FN.
@@ -125,6 +128,8 @@ def calculate_point_PCK(matched_predictions: List[MatchedPredictionKeypoint], th
             bbox_dims = np.array(prediction.bbox[2:])
             if dist / max(bbox_dims) <= threshold:
                 n_correct += 1
+        else:
+            print("FNs are not measured by PCK!")
     return n_correct / n_total
 
 def calculate_image_PCK(matched_predictions: List[MatchedPredictionKeypoint], threshold: float = 0.1, visible_only: bool = False):
@@ -153,10 +158,10 @@ def get_keypoint_distances(matched_predictions: List[MatchedPredictionKeypoint],
     """
     distances = []
     for prediction in matched_predictions:
-        if prediction.gt_keypoint is None or prediction.gt_visible == 0:
+        if prediction.gt_keypoint is None:
             # this is a FP
             continue
-        if visible_only and prediction.gt_visible == 1.0:
+        if visible_only and prediction.gt_visible is False:
             # these would be FPs because there is no GT keypoint here.
             continue
         if prediction.predicted_keypoint is not None:
@@ -209,18 +214,18 @@ def is_TP_by_distance(x: MatchedPredictionKeypoint, px_threshold: float = 20):
 
 
 
-def calculate_average_keypoint_distance(matched_predictions: List[MatchedPredictionKeypoint]):
+def calculate_average_keypoint_distance(matched_predictions: List[MatchedPredictionKeypoint], visible_only: bool = False):
     """
     Average keypoint distance is the average distance of all predictions in the dataset.
     """
-    distances = get_keypoint_distances(matched_predictions)
+    distances = get_keypoint_distances(matched_predictions, visible_only)
     return np.mean(distances)
 
-def calculate_median_keypoint_distance(matched_predictions: List[MatchedPredictionKeypoint]):
+def calculate_median_keypoint_distance(matched_predictions: List[MatchedPredictionKeypoint], visible_only: bool = False):
     """
     Median keypoint distance is the median distance of all predictions in the dataset.
     """
-    distances = get_keypoint_distances(matched_predictions)
+    distances = get_keypoint_distances(matched_predictions, visible_only)
     return np.median(distances)
 
 def filter_predictions_by_keypoint_category(matched_predictions: List[MatchedPredictionKeypoint], keypoint_category: str):
@@ -244,8 +249,10 @@ if __name__ == "__main__":
     from few_shot_keypoints.matcher import KeypointListMatcher
     import json
 
-    coco_json = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_tvmonitor_test.json"
-    coco_results_json = "/home/tlips/Code/few-shot-keypoints/test.json"
+    coco_json = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json"
+    coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dift/aeroplane/1/resize_2025_results.json"
+    # coco_json = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
+    # coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dift/tshirt/1/resize_2025_results.json"
 
     with open(coco_results_json, "r") as f:
         coco_results_dataset = CocoKeypointsResultDataset(json.load(f))
@@ -258,12 +265,18 @@ if __name__ == "__main__":
     print(matched_predictions[0])
     print(f"point PCK: {calculate_point_PCK(matched_predictions)}")
     print(f"image PCK: {calculate_image_PCK(matched_predictions)}")
+    print(f"image PCK visible only: {calculate_image_PCK(matched_predictions, visible_only=True)}")
     print(f"average keypoint distance: {calculate_average_keypoint_distance(matched_predictions)}")
+    print(f"average keypoint distance visible only: {calculate_average_keypoint_distance(matched_predictions, visible_only=True)}")
     print(f"median keypoint distance: {calculate_median_keypoint_distance(matched_predictions)}")
+    print(f"median keypoint distance visible only: {calculate_median_keypoint_distance(matched_predictions, visible_only=True)}")
 
 
 
 
 
     print(f"mAP bbox_alpha: {calculate_mAP(matched_predictions, is_TP_by_fraction_of_max_bbox_size)}")
-    print(f"mAP L2: {calculate_mAP(matched_predictions, is_TP_by_distance)}")
+    print(f"mAP L2: {calculate_mAP(matched_predictions, partial(is_TP_by_distance, px_threshold=10))}")
+
+
+# --augment_train --keypoint_channel_configuration shoulder_left:neck_left:neck_right:shoulder_right:sleeve_right_top:sleeve_right_bottom:armpit_right:waist_right:waist_left:armpit_left:sleeve_left_bottom:sleeve_left_top --accelerator gpu --ap_epoch_freq 1 --backbone_type MaxVitUnet --devices 1 --early_stopping_relative_threshold -1 --json_dataset_path /home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-train_resized_512x256/tshirts-train.json  --json_test_dataset_path /home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json --json_validation_dataset_path /home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-val_resized_512x256/tshirts-val.json --max_epochs 40 --maximal_gt_keypoint_pixel_distances "8 16 32" --minimal_keypoint_extraction_pixel_distance 8 --precision 16 --seed 2024 --heatmap_sigma 8 --learning_rate 0.0003 --batch_size 8 --wandb_project few-shot-keypoints
