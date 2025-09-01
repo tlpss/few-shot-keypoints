@@ -26,6 +26,8 @@ class ViTFeaturizer(BaseFeaturizer):
         self.layer_aggregator = layer_aggregator
         self.device = device
 
+        #print(self.model.config)
+
 
     @FeaturizerCache
     def extract_features(self, image: torch.Tensor, **kwargs):
@@ -68,13 +70,85 @@ class ViTFeaturizer(BaseFeaturizer):
         # return: [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES_HEIGHT, N_PATCHES_WIDTH, HIDDEN_SIZE]
         return [hidden_states[i].reshape(hidden_states[i].shape[0], height // self.model.config.patch_size, width // self.model.config.patch_size, hidden_states[i].shape[2]) for i in range(len(hidden_states))]
 
+
+class DinoV2Featurizer(ViTFeaturizer):
+    """ 
+    14x14 patch size, pretrained on 518x518 images.
+    
+    """
+    def __init__(self, hf_model_name: str = "facebook/dinov2-base", layers: list[int] = [-1], 
+    layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
+    device: str = 'cuda'):
+        super().__init__(hf_model_name, layers, layer_aggregator, device)
+
+
+class DinoV3Featurizer(ViTFeaturizer):
+    def __init__(self, hf_model_name: str = "facebook/dinov3-vits16-pretrain-lvd1689m", layers: list[int] = [-1], 
+    layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
+    device: str = 'cuda'):
+        super().__init__(hf_model_name, layers, layer_aggregator, device)
+
+    @torch.no_grad()
+    def forward(self, images: torch.Tensor):
+        assert len(images.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
+
+        # model uses embedding inerpolation to deal with different image sizes!
+        outputs = self.model(pixel_values=images, output_hidden_states=True)
+        hidden_states = outputs.hidden_states # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES, HIDDEN_SIZE]
+        # drop class token  and 4 register tokens
+        hidden_states = [hidden_states[i][:,5:,:] for i in range(len(hidden_states))] # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES, HIDDEN_SIZE]
+        # reshape to 2D
+        hidden_states = self.arrange_tokens_in_grid(hidden_states,width=images.shape[3],height=images.shape[2]) # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES_HEIGHT, N_PATCHES_WIDTH, HIDDEN_SIZE]
+        features =  self.layer_aggregator([hidden_states[i] for i in self.layers])  # B,H',W',D
+        return features
+class RADIOv2Featurizer(ViTFeaturizer):
+    """
+    https://arxiv.org/pdf/2412.07679
+    https://huggingface.co/nvidia/C-RADIOv2-B
+    
+    B: 90M
+    L: 320M
+    H: 653M
+    g: 1.1B
+
+
+    """
+    def __init__(self, hf_model_name: str = "nvidia/C-RADIOv2-B", layers: list[int] = [-1], 
+    layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
+    device: str = 'cuda'):
+        self.model = AutoModel.from_pretrained(hf_model_name, trust_remote_code=True)
+        self.model.eval()
+        self.model.to(device)
+        # self.processor = AutoImageProcessor.from_pretrained(hf_model_name)
+        # https://huggingface.co/facebook/dinov2-base/discussions/9 -> default resolution is 224,224 for Dinov2!
+        #TODO: want to make this bigger?
+        # self.processor = BitImageProcessor(size=(self.model.config.image_size, self.model.config.image_size),do_center_crop=False,do_rescale=True,do_normalize=True)
+        self.layers = layers
+        self.layer_aggregator = layer_aggregator
+        self.device = device
+
+
+    @torch.no_grad()
+    def forward(self, images: torch.Tensor):
+        assert len(images.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
+        assert images.shape[1] == 3
+        # https://huggingface.co/nvidia/C-RADIOv2-B/blob/main/radio_model.py
+
+        spatial_features = self.model.model.forward_intermediates(
+            images,
+            indices=self.layers,
+            intermediates_only=True,
+            aggregation="sparse"
+
+            )        # output is in BCHW, no need to arrange in grid
+        features =  self.layer_aggregator(spatial_features)
+        # convert to BHWC
+        features = features.permute(0,2,3,1)
+        return features
+
 if __name__ == "__main__":
-    featurizer = ViTFeaturizer(
-        hf_model_name="facebook/dinov2-small",
-        layers=[11],
-        layer_aggregator=concatentation_aggregator,
-        device="cuda"
-    )
+    # featurizer = RADIOv2Featurizer()
+    featurizer = DinoV3Featurizer()
     url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
     image = Image.open(requests.get(url, stream=True).raw)
     image = image.resize((512,512))

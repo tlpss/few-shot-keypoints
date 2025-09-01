@@ -4,15 +4,15 @@ import os
 # add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.match_spair_dataset import match_dataset, Config as MatchDatasetConfig
+from scripts.match_dataset import match_dataset, Config as MatchDatasetConfig
 from dataclasses import dataclass, field
 
 @dataclass
 class Config:
-    categories: list[str] = field(default_factory=lambda: ["train", "aeroplane","bicycle","bird","boat","bottle","bus","car","cat","chair","cow","dog","horse","motorbike","person","pottedplant","sheep","train","tvmonitor"])
-    support_image_configs: list[int] = field(default_factory=lambda: [1,2,4])
+    categories: list[str] = field(default_factory=lambda: ["train", "aeroplane","bicycle","bird","boat","bottle","bus","car","cat","chair"]) #,"cow","dog","horse","motorbike","person","pottedplant","sheep","train","tvmonitor"])
+    support_image_configs: list[int] = field(default_factory=lambda: [1])
     N_support_sets = 5
-    featurizers: list[str] = field(default_factory=lambda: ["dino","dift"])
+    featurizers: list[str] = field(default_factory=lambda: ["dinov2","dinov3","radio","dift"])
     transform : str = "resize"
     output_base_dir: str = "results/SPAIR-support-sets"
 

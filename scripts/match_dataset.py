@@ -9,7 +9,7 @@ import draccus
 from few_shot_keypoints.dataset_matching import populate_matcher_w_random_references, run_coco_dataset_inference
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
 from few_shot_keypoints.datasets.transforms import RESIZE_TRANSFORM, revert_resize_transform, MAX_LENGTH_RESIZE_AND_PAD_TRANSFORM, revert_max_length_resize_and_pad_transform
-from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer
+from few_shot_keypoints.featurizers.ViT_featurizer import DinoV2Featurizer, DinoV3Featurizer, RADIOv2Featurizer, ViTFeaturizer
 from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
 from few_shot_keypoints.matcher import KeypointFeatureMatcher, KeypointListMatcher
 
@@ -40,8 +40,12 @@ def match_dataset(config: Config):
     # load test dataset 
     test_dataset = TorchCOCOKeypointsDataset(config.test_dataset_path, transform=transform)
     # create matcher
-    if config.featurizer == "dino":
-        featurizer = ViTFeaturizer(device='cuda', hf_model_name="facebook/dinov2-small")
+    if config.featurizer == "dinov2":
+        featurizer = DinoV2Featurizer(device='cuda')
+    elif config.featurizer == "dinov3":
+        featurizer = DinoV3Featurizer(device='cuda')
+    elif config.featurizer == "radio":
+        featurizer = RADIOv2Featurizer(device='cuda')
     elif config.featurizer == "dift":
         featurizer = SDFeaturizer(device='cuda')
     else:
@@ -68,7 +72,7 @@ if __name__ == "__main__":
     config.train_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-train_resized_512x256/tshirts-train.json"
     config.test_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
     config.output_base_dir = "results/aRTF-support-sets"
-    config.featurizer = "dino"
+    config.featurizer = "dift"
     config.N_support_images = 1
     config.seed = 2025
     config.transform = "resize"
