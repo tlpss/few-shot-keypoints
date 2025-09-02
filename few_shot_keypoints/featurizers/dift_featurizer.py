@@ -1,4 +1,4 @@
-""" taken from https://arxiv.org/pdf/2306.03881 and slightly modified"""
+""" Code taken from https://arxiv.org/pdf/2306.03881 and slightly modified"""
 
 import os
 import gc
@@ -18,6 +18,7 @@ from diffusers import DDIMScheduler
 from diffusers import StableDiffusionPipeline
 
 from few_shot_keypoints.featurizers.base import BaseFeaturizer, FeaturizerCache
+from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
 
 class MyUNet2DConditionModel(UNet2DConditionModel):
     def forward(
@@ -197,15 +198,15 @@ class OneStepSDPipeline(StableDiffusionPipeline):
 
 class SDFeaturizer(BaseFeaturizer):
     """ 
-    This is taken from the paper:
-
+    This is taken from the paper: https://arxiv.org/pdf/2306.03881 
 
     with some changes:
         - I use the base version of SD2.1, which was finetuned on 512x512 images but not on 768x768. This is to align better with DinoV2 large (518x518)
+        - i set the ensemble_size to 1, which should reduce PCK by 2 percentage points according to the paper but reduces the inference time from 330ms to 60ms on a 4090.
 
 
     """
-    def __init__(self, sd_id='stabilityai/stable-diffusion-2-1-base',device='cuda'):
+    def __init__(self, sd_id='stabilityai/stable-diffusion-2-1-base',device='cuda', default_t=261, default_up_ft_index=1, default_ensemble_size=1):
         self.device = device
         unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet")
         onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
@@ -216,20 +217,33 @@ class SDFeaturizer(BaseFeaturizer):
         onestep_pipe.enable_attention_slicing()
         onestep_pipe.enable_xformers_memory_efficient_attention()
         self.pipe = onestep_pipe
-    
+
+        self.default_t = default_t
+        self.default_up_ft_index = default_up_ft_index
+        self.default_ensemble_size = default_ensemble_size
     @FeaturizerCache
     @torch.no_grad()
     def extract_features(self,
                 img_tensor, 
                 prompt = "",
-                t=261,
-                up_ft_index=1,
-                ensemble_size=8):
+                t = None,
+                up_ft_index=None,
+                ensemble_size=None):
         """
             img_tensor: [1,c,h,w]; (0,1) range, unnormalized.
+
+
+            t= noise timestep, earlier will focus more on semantics, later more on details. 
+            up_ft_index= index of the upsampling block to use for feature extraction.
+            ensemble_size= number of noisy samples to use for feature extraction. 
         """
         assert len(img_tensor.shape) == 4 # 1,c,h,w
         assert img_tensor.shape[0] == 1
+
+
+        t = self.default_t if t is None else t
+        up_ft_index = self.default_up_ft_index if up_ft_index is None else up_ft_index
+        ensemble_size = self.default_ensemble_size if ensemble_size is None else ensemble_size
 
         # copy tensor 
         img_tensor = img_tensor.clone()
@@ -261,6 +275,20 @@ class SDFeaturizer(BaseFeaturizer):
 
 
         return unet_ft
+
+@FeaturizerRegistry.register("dift-sd2.1-e1")
+class SDFeaturizerSD21E1(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 1
+
+@FeaturizerRegistry.register("dift-sd2.1-e8")
+class SDFeaturizerSD21E8(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 8
+
+
 
 
 if __name__ == "__main__":
