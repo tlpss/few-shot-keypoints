@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 import numpy as np
+import torch
 from tqdm import trange
 from dataclasses import dataclass
 import draccus
@@ -9,8 +10,7 @@ import draccus
 from few_shot_keypoints.dataset_matching import populate_matcher_w_random_references, run_coco_dataset_inference
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
 from few_shot_keypoints.datasets.transforms import RESIZE_TRANSFORM, revert_resize_transform, MAX_LENGTH_RESIZE_AND_PAD_TRANSFORM, revert_max_length_resize_and_pad_transform
-from few_shot_keypoints.featurizers.ViT_featurizer import DinoV2Featurizer, DinoV3Featurizer, RADIOv2Featurizer, ViTFeaturizer
-from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
+from few_shot_keypoints.featurizers import FeaturizerRegistry
 from few_shot_keypoints.matcher import KeypointFeatureMatcher, KeypointListMatcher
 
 @dataclass
@@ -39,15 +39,16 @@ def match_dataset(config: Config):
     train_dataset = TorchCOCOKeypointsDataset(config.train_dataset_path, transform=transform)
     # load test dataset 
     test_dataset = TorchCOCOKeypointsDataset(config.test_dataset_path, transform=transform)
+
+    category = train_dataset.parsed_coco.categories[0].name
+    filename = Path(config.output_base_dir) / f"{config.featurizer}" /category / f"{config.N_support_images}" / f"{config.transform}_{config.seed}_results.json"
+    if filename.exists():
+        print(f"Results already exist for {filename}")
+        return
+
     # create matcher
-    if config.featurizer == "dinov2":
-        featurizer = DinoV2Featurizer(device='cuda')
-    elif config.featurizer == "dinov3":
-        featurizer = DinoV3Featurizer(device='cuda')
-    elif config.featurizer == "radio":
-        featurizer = RADIOv2Featurizer(device='cuda')
-    elif config.featurizer == "dift":
-        featurizer = SDFeaturizer(device='cuda')
+    if config.featurizer in FeaturizerRegistry.list():
+        featurizer = FeaturizerRegistry.create(config.featurizer, device='cuda')
     else:
         raise ValueError(f"Invalid featurizer: {config.featurizer}")
 
@@ -60,19 +61,24 @@ def match_dataset(config: Config):
 
 
     coco_results = run_coco_dataset_inference(test_dataset, matcher, transform_reverter=transform_reverter)
-    category = train_dataset.parsed_coco.categories[0].name
-    filename = Path(config.output_base_dir) / f"{config.featurizer}" /category / f"{config.N_support_images}" / f"{config.transform}_{config.seed}_results.json"
     os.makedirs(filename.parent, exist_ok=True)
     with open(filename, "w") as f:
         f.write(coco_results.model_dump_json(indent=4))
 
+    # clear VRAM 
+    del featurizer
+    import gc
+    gc.collect()
+    with torch.no_grad():
+        # clear cache
+        torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     config = Config()
-    config.train_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-train_resized_512x256/tshirts-train.json"
-    config.test_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
+    # config.train_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-train_resized_512x256/tshirts-train.json"
+    # config.test_dataset_path = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
     config.output_base_dir = "results/aRTF-support-sets"
-    config.featurizer = "dift"
+    config.featurizer = "dinov3-l"
     config.N_support_images = 1
     config.seed = 2025
     config.transform = "resize"

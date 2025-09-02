@@ -96,7 +96,6 @@ class DinoV2LargeFeaturizer(ViTFeaturizer):
 
 
 
-
 class DinoV3Featurizer(ViTFeaturizer):
     def __init__(self, hf_model_name: str = "facebook/dinov3-vitl16-pretrain-lvd1689m", layers: list[int] = [-1], 
     layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
@@ -120,7 +119,7 @@ class DinoV3Featurizer(ViTFeaturizer):
 
 @FeaturizerRegistry.register("dinov3-s")
 class DinoV3SmallFeaturizer(DinoV3Featurizer):
-    model_name = "facebook/dinov3-vitl16-pretrain-lvd1689m"
+    model_name = "facebook/dinov3-vits16-pretrain-lvd1689m"
     def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
         super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
 
@@ -138,7 +137,11 @@ class DinoV3LargeFeaturizer(DinoV3Featurizer):
     def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
         super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
 
-
+@FeaturizerRegistry.register("dinov3-h")
+class DinoV3HugeFeaturizer(DinoV3Featurizer):
+    model_name = "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+    def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
+        super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
 
 
 class RADIOv2Featurizer(ViTFeaturizer):
@@ -187,19 +190,24 @@ class RADIOv2Featurizer(ViTFeaturizer):
         return features
 
 
-@FeaturizerRegistry.register("radio-b")
+@FeaturizerRegistry.register("radiov2-b")
 class RADIOv2BaseFeaturizer(RADIOv2Featurizer):
     model_name = "nvidia/C-RADIOv2-B"
     def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
         super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
 
 
-@FeaturizerRegistry.register("radio-l")
+@FeaturizerRegistry.register("radiov2-l")
 class RADIOv2LargeFeaturizer(RADIOv2Featurizer):
     model_name = "nvidia/C-RADIOv2-L"
     def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
         super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
 
+@FeaturizerRegistry.register("radiov2-h")
+class RADIOv2HugeFeaturizer(RADIOv2Featurizer):
+    model_name = "nvidia/C-RADIOv2-H"
+    def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
+        super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
 
 if __name__ == "__main__":
     featurizer = RADIOv2Featurizer()

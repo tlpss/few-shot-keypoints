@@ -4,17 +4,18 @@ import os
 # add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
 from scripts.match_dataset import match_dataset, Config as MatchDatasetConfig
 from dataclasses import dataclass, field
 
 @dataclass
 class Config:
-    categories: list[str] = field(default_factory=lambda: ["train", "aeroplane","bicycle","bird","boat","bottle","bus","car","cat","chair"]) #,"cow","dog","horse","motorbike","person","pottedplant","sheep","train","tvmonitor"])
+    categories: list[str] = field(default_factory=lambda: ["train", "aeroplane","bicycle","bird","boat","bottle","bus","car","cat","chair","cow","dog","horse","motorbike","person","pottedplant","sheep","train","tvmonitor"])
     support_image_configs: list[int] = field(default_factory=lambda: [1])
     N_support_sets = 5
-    featurizers: list[str] = field(default_factory=lambda: ["dinov2","dinov3","radio","dift"])
+    featurizers: list[str] = field(default_factory=lambda: ["dinov2-s"])
     transform : str = "resize"
-    output_base_dir: str = "results/SPAIR-support-sets"
+    output_base_dir: str = "results/SPAIR-correspondences"
 
 def run_matching_experiments(config: Config):
     # check all datasets exist
@@ -47,4 +48,5 @@ def run_matching_experiments(config: Config):
 
 if __name__ == "__main__":
     config = Config()
+    config.featurizers = FeaturizerRegistry.list()
     run_matching_experiments(config)
