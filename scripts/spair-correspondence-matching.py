@@ -1,5 +1,5 @@
 """ taken from https://github.com/Tsingularity/dift/blob/main/eval_spair.py
-and slightly adapted to this codebase
+and slightly adapted to this codebase: do not precompute maps for all images, but compute them on the fly. slower, but easier.
 
 """
 
@@ -15,7 +15,8 @@ import os
 import json
 from PIL import Image
 import torch.nn as nn
-
+from few_shot_keypoints.featurizers import FeaturizerRegistry
+import time
 
 def preprocess_image(img, img_size):
     img = torch.from_numpy(np.array(img)).permute(2,0,1).unsqueeze(0)
@@ -61,8 +62,8 @@ def main(args):
                 cat2img[cat].append(trg_imname)
 
  
-    #dift = SDFeaturizer()
-    dift = ViTFeaturizer()
+    featurizer = FeaturizerRegistry.create(args.featurizer)
+    print(featurizer)
 
 
 
@@ -119,18 +120,13 @@ def main(args):
             # trg_ft = output_dict[data['trg_imname']]
 
             # instead of precomputing all 
-
-            src_ft = dift.extract_features(src_img,
-                                            prompt=f"a photo of a {cat}",
-                                            t=args.t,
-                                            up_ft_index=args.up_ft_index,
-                                            ensemble_size=args.ensemble_size).cpu()
-            trg_ft = dift.extract_features(trg_img,
-                                            prompt=f"a photo of a {cat}",
-                                            t=args.t,
-                                            up_ft_index=args.up_ft_index,
-                                            ensemble_size=args.ensemble_size).cpu()
-            
+            before_inference = time.time()
+            src_ft = featurizer.extract_features(src_img,
+                                            prompt=f"a photo of a {cat}")
+            trg_ft = featurizer.extract_features(trg_img,
+                                            prompt=f"a photo of a {cat}")
+            after_inference = time.time()
+            #print(f"Inference time: {after_inference - before_inference}")
             # resize both to the original image size, as is done in the original code.
             #src_ft = nn.Upsample(size=src_img_size, mode='bilinear')(src_ft)
             #trg_ft = nn.Upsample(size=trg_img_size, mode='bilinear')(trg_ft)
@@ -146,6 +142,10 @@ def main(args):
             total = 0
             correct = 0
 
+            num_channel = src_ft.size(1)
+            trg_vec = trg_ft.view(num_channel, -1).transpose(0, 1) # HW, C
+            trg_vec = F.normalize(trg_vec) # HW, c
+
             for idx in range(len(data['src_kps'])):
                 total += 1
                 cat_total += 1
@@ -153,14 +153,12 @@ def main(args):
                 src_point = data['src_kps'][idx]
                 trg_point = data['trg_kps'][idx]
 
-                num_channel = src_ft.size(1)
                 src_vec = src_ft[0, :, src_point[1], src_point[0]].view(1, num_channel) # 1, C
-                trg_vec = trg_ft.view(num_channel, -1).transpose(0, 1) # HW, C
                 src_vec = F.normalize(src_vec).transpose(0, 1) # c, 1
-                trg_vec = F.normalize(trg_vec) # HW, c
-                cos_map = torch.mm(trg_vec, src_vec).view(h, w).cpu().numpy() # H, W
-
-                max_yx = np.unravel_index(cos_map.argmax(), cos_map.shape)
+                cos_map = torch.mm(trg_vec, src_vec).view(h, w)# H, W            
+                # max_yx = np.unravel_index(cos_map.argmax(), cos_map.shape)
+                max_yx = torch.argmax(cos_map)
+                max_yx = torch.div(max_yx, cos_map.shape[1], rounding_mode='floor'), max_yx % cos_map.shape[1]
 
                 dist = ((max_yx[1] - trg_point[0]) ** 2 + (max_yx[0] - trg_point[1]) ** 2) ** 0.5
                 if (dist / threshold) <= 0.1:
@@ -169,8 +167,12 @@ def main(args):
                     all_correct += 1
 
             cat_pck.append(correct / total)
-        total_pck.extend(cat_pck)
 
+            after_matching = time.time()
+            #print(f"Matching time: {after_matching - after_inference}")
+
+        total_pck.extend(cat_pck)
+ 
         print(f'{cat} per image PCK@0.1: {np.mean(cat_pck) * 100:.2f}')
         print(f'{cat} per point PCK@0.1: {cat_correct / cat_total * 100:.2f}')
     print(f'All per image PCK@0.1: {np.mean(total_pck) * 100:.2f}')
@@ -184,11 +186,9 @@ if __name__ == "__main__":
     # parser.add_argument('--dift_model', choices=['sd', 'adm'], default='sd', help="which dift version to use")
     parser.add_argument('--img_size', nargs='+', type=int, default=[768, 768],
                         help='''in the order of [width, height], resize input image
-                            to [w, h] before fed into diffusion model, if set to 0, will
+                            to [w, h] before fed into  model, if set to 0, will
                             stick to the original input size. by default is 768x768.''')
-    parser.add_argument('--t', default=261, type=int, help='t for diffusion')
-    parser.add_argument('--up_ft_index', default=1, type=int, help='which upsampling block to extract the ft map')
-    parser.add_argument('--ensemble_size', default=8, type=int, help='ensemble size for getting an image ft map')
     parser.add_argument('--num_pairs_per_category', default=-1, type=int, help='number of pairs to process per category')
+    parser.add_argument('--featurizer', type=str, default='dinov3-l', help='featurizer to use')
     args = parser.parse_args()
     main(args)

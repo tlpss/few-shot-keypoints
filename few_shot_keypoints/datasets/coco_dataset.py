@@ -59,8 +59,8 @@ class TorchCOCOKeypointsDataset:
         self.keypoint_channel_configuration = keypoint_channel_configuration
         self.detect_only_visible_keypoints = detect_only_visible_keypoints
 
-        print(f"{detect_only_visible_keypoints=}")
-        print(f" using transform: {transform}")
+        # print(f"{detect_only_visible_keypoints=}")
+        # print(f" using transform: {transform}")
 
         self.transform = transform
 

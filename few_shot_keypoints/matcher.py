@@ -67,6 +67,8 @@ class KeypointFeatureMatcher(BaseKeypointFeatureMatcher):
         
         reference_vector = self.reference_vectors[0] #1,D
         reference_vector = reference_vector.unsqueeze(2).unsqueeze(3) # 1,D,1,1
+
+        # cosine similarity handles the normalization internally.
         cos_map = torch.nn.functional.cosine_similarity(image_features, reference_vector,dim=1) # 1,H,W
 
         argmax = cos_map.argmax()
