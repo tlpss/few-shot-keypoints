@@ -29,7 +29,7 @@ class BaseKeypointFeatureMatcher(abc.ABC):
     @abc.abstractmethod
     def get_best_match(self, img: torch.Tensor) -> MatchingResult:
         raise NotImplementedError("Subclasses must implement this method")
-
+ 
     def validate_input(self, img: torch.Tensor):
         assert len(img.shape) == 4 # 1,C,H,W
         assert img.shape[0] == 1
@@ -60,7 +60,7 @@ class KeypointFeatureMatcher(BaseKeypointFeatureMatcher):
         self.reference_vectors.append(vector)
 
 
-    def get_best_match(self, img: torch.Tensor) -> MatchingResult:
+    def get_best_match(self, img: torch.Tensor, top_k: int = 1) -> MatchingResult:
         self.validate_input(img)
         image_features = self.feature_extractor.extract_features(img) # 1,D,H,W
         image_features = image_features[0] # D,H,W
@@ -71,9 +71,32 @@ class KeypointFeatureMatcher(BaseKeypointFeatureMatcher):
         # cosine similarity handles the normalization internally.
         cos_map = torch.nn.functional.cosine_similarity(image_features, reference_vector,dim=1) # 1,H,W
 
-        argmax = cos_map.argmax()
-        _,v,u = torch.unravel_index(argmax, cos_map.shape)
-        return MatchingResult(u=int(u.item()), v=int(v.item()), score=round(float(cos_map[0,v,u].item()), 4))
+        # if top_k == 1:
+        #     argmax = cos_map.argmax()
+        #     _,v,u = torch.unravel_index(argmax, cos_map.shape)
+        #     return MatchingResult(u=int(u.item()), v=int(v.item()), score=round(float(cos_map[0,v,u].item()), 4))
+    
+        # else:
+        #     _,_, W = cos_map.shape
+        #     topk = torch.topk(cos_map[0].view(-1), top_k)
+        #     us = (topk.indices % W)
+        #     vs = (topk.indices // W)
+        #     vals = topk.values
+        #     return [MatchingResult(u=int(u.item()), v=int(v.item()), score=round(float(val.item()), 4)) for u, v, val in zip(us, vs, vals)]
+
+        results = []
+        for i in range(top_k):
+            argmax = cos_map.argmax()
+            _,v,u = torch.unravel_index(argmax, cos_map.shape)
+            results.append(MatchingResult(u=int(u.item()), v=int(v.item()), score=round(float(cos_map[0,v,u].item()), 4)))
+            # set square around the keypoint to zero 
+            padding = 50
+            square_mask = torch.ones_like(cos_map)
+            square_mask[0,v-padding:v+padding,u-padding:u+padding] = 0
+            cos_map = cos_map * square_mask
+        
+            
+        return results
 
 
 
@@ -127,3 +150,19 @@ class KeypointListMatcher:
         return [matcher.get_best_match(img) for matcher in self.matchers]
 
 
+
+if __name__ == "__main__":
+    from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer
+    from few_shot_keypoints.matcher import KeypointFeatureMatcher, KeypointListMatcher
+    import torch
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    featurizer = ViTFeaturizer(device='cuda', hf_model_name="facebook/dinov2-small")
+    matcher = KeypointFeatureMatcher(featurizer)
+    matcher.add_reference_image(torch.randint(0, 255, (1,3,224,224)) / 255.0, [100,100])
+    img = torch.randint(0, 255, (1,3,224,224)) / 255.0
+    kps = matcher.get_best_match(img, top_k=10)
+    kp1 = matcher.get_best_match(img, top_k=1)
+    print(kp1)
+    print(kps)
