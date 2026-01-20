@@ -1,4 +1,4 @@
-from few_shot_keypoints.featurizers.base import BaseFeaturizer, FeaturizerCache
+from few_shot_keypoints.featurizers.base import BaseFeaturizer
 from few_shot_keypoints.featurizers.dino_vit_paper.extractor_skil import ViTExtractor
 from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
 import torch
@@ -41,6 +41,7 @@ class ViTPaperFeaturizer(BaseFeaturizer):
 
         image_w = (n_patches_w - 1) * self.extractor.stride[1] + self.extractor.p
         image_h = (n_patches_h - 1) * self.extractor.stride[0] + self.extractor.p
+        # print(f"image_w: {image_w}, image_h: {image_h}")
 
         resized_image = torch.nn.functional.interpolate(image, size=(image_h, image_w), mode='bilinear', align_corners=False)
 
@@ -64,11 +65,18 @@ class Dinov2sPaperFeaturizer(ViTPaperFeaturizer):
 class DinoPaperFeaturizer(ViTPaperFeaturizer):
     def __init__(self, device: str = 'cuda:0'):
         # dinov1 - same as in the paper.
-        super().__init__(model_type='dino_vits8', stride=4, device=device, layer=9, facet='key', use_bin_features=True)
+        super().__init__(model_type='dino_vits8', stride=4, device=device, layer=9, facet='key', use_bin_features=False)
+
+@FeaturizerRegistry.register("dinov2-s-paper-hf-equivalent")
+class Dinov2sPaperHfEquivalentFeaturizer(ViTPaperFeaturizer):
+    def __init__(self, device: str = 'cuda:0'):
+        # dinov2 variant with settings that match HF Dinov2S model.
+        super().__init__(model_type='dinov2_vits14', stride=14, device=device, layer=11, facet='token', use_bin_features=False)
+
 
 if __name__ == "__main__":
     # settings similar to my HF model.
-    featurizer = ViTPaperFeaturizer(model_type='dinov2_vits14', stride=14, device='cuda:0', layer=11, facet='token', use_bin_features=False)
-    image = torch.rand(1, 3, 504, 504)
+    featurizer = ViTPaperFeaturizer(model_type='dinov2_vits14', stride=7, device='cuda:0', layer=11, facet='token', use_bin_features=False)
+    image = torch.rand(1, 3, 512, 512)
     descriptors = featurizer.extract_features(image)
     print(descriptors.shape)

@@ -246,13 +246,14 @@ if __name__ == "__main__":
     from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
     from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset
     import json
+    from few_shot_keypoints.paths import DSD_MUGS_TEST_JSON, DSD_SHOE_TEST_JSON
 
     coco_json = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_bicycle_test.json"
     coco_results_json = "/home/tlips/Code/few-shot-keypoints/test.json"
     # coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/aeroplane/1/resize_2028_results.json"
     # coco_json = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
     # coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dift/tshirt/1/resize_2025_results.json"
-
+    coco_json = DSD_SHOE_TEST_JSON
     with open(coco_results_json, "r") as f:
         coco_results_dataset = CocoKeypointsResultDataset(json.load(f))
     
@@ -262,9 +263,9 @@ if __name__ == "__main__":
     matched_predictions = match_keypoints(coco_dataset, coco_results_dataset)
     print(len(matched_predictions))
     print(matched_predictions[0])
-    print(f"point PCK: {calculate_point_PCK(matched_predictions)}")
-    print(f"image PCK: {calculate_image_PCK(matched_predictions)}")
-    print(f"image PCK visible only: {calculate_image_PCK(matched_predictions, visible_only=True)}")
+    # print(f"point PCK: {calculate_point_PCK(matched_predictions)}")
+    # print(f"image PCK: {calculate_image_PCK(matched_predictions)}")
+    # print(f"image PCK visible only: {calculate_image_PCK(matched_predictions, visible_only=True)}")
     print(f"average keypoint distance: {calculate_average_keypoint_distance(matched_predictions)}")
     print(f"average keypoint distance visible only: {calculate_average_keypoint_distance(matched_predictions, visible_only=True)}")
     print(f"median keypoint distance: {calculate_median_keypoint_distance(matched_predictions)}")
@@ -274,8 +275,7 @@ if __name__ == "__main__":
 
 
 
-    print(f"mAP bbox_alpha: {calculate_mAP(matched_predictions, is_TP_by_fraction_of_max_bbox_size)}")
-    print(f"mAP L2: {calculate_mAP(matched_predictions, partial(is_TP_by_distance, px_threshold=10))}")
+    # print(f"mAP bbox_alpha: {calculate_mAP(matched_predictions, is_TP_by_fraction_of_max_bbox_size)}")
+    # print(f"mAP L2: {calculate_mAP(matched_predictions, partial(is_TP_by_distance, px_threshold=10))}")
 
 
-# --augment_train --keypoint_channel_configuration shoulder_left:neck_left:neck_right:shoulder_right:sleeve_right_top:sleeve_right_bottom:armpit_right:waist_right:waist_left:armpit_left:sleeve_left_bottom:sleeve_left_top --accelerator gpu --ap_epoch_freq 1 --backbone_type MaxVitUnet --devices 1 --early_stopping_relative_threshold -1 --json_dataset_path /home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-train_resized_512x256/tshirts-train.json  --json_test_dataset_path /home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json --json_validation_dataset_path /home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-val_resized_512x256/tshirts-val.json --max_epochs 40 --maximal_gt_keypoint_pixel_distances "8 16 32" --minimal_keypoint_extraction_pixel_distance 8 --precision 16 --seed 2024 --heatmap_sigma 8 --learning_rate 0.0003 --batch_size 8 --wandb_project few-shot-keypoints
