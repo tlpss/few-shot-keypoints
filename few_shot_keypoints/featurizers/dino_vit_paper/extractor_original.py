@@ -1,6 +1,5 @@
 """
-code taken from https://github.com/ShirAmir/dino-vit-features/blob/main/extractor.py
-and then added adapter for my codebase.
+taken from https://github.com/ShirAmir/dino-vit-features/blob/main/extractor.py
 """
 
 import argparse
@@ -337,7 +336,7 @@ def str2bool(v):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Facilitate ViT Descriptor extraction.')
     parser.add_argument('--image_path', type=str, required=True, help='path of the extracted image.')
-    parser.add_argument('--output_path', type=str, required=True, help='path to file containing extracted descriptors.')
+    parser.add_argument('--output_path', type=str, required=False, help='path to file containing extracted descriptors.')
     parser.add_argument('--load_size', default=224, type=int, help='load size of the input image.')
     parser.add_argument('--stride', default=4, type=int, help="""stride of first convolution layer. 
                                                               small stride -> higher resolution.""")
@@ -359,5 +358,6 @@ if __name__ == "__main__":
         print(f"Image {args.image_path} is preprocessed to tensor of size {image_batch.shape}.")
         descriptors = extractor.extract_descriptors(image_batch.to(device), args.layer, args.facet, args.bin)
         print(f"Descriptors are of size: {descriptors.shape}")
-        torch.save(descriptors, args.output_path)
+        if args.output_path is not None:
+            torch.save(descriptors, args.output_path)
         print(f"Descriptors saved to: {args.output_path}")
