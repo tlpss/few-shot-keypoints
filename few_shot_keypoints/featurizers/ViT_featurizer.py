@@ -30,7 +30,6 @@ class ViTFeaturizer(BaseFeaturizer):
         #print(self.model.config)
 
 
-    @FeaturizerCache
     def extract_features(self, image: torch.Tensor, **kwargs):
         assert len(image.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
         image = image.to(self.device)

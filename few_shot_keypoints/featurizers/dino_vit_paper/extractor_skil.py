@@ -54,8 +54,8 @@ class ViTExtractor:
             self.p = self.p[0]
         self.stride = self.model.patch_embed.proj.stride
 
-        self.mean = (0.485, 0.456, 0.406) if "dino" in self.model_type else (0.5, 0.5, 0.5)
-        self.std = (0.229, 0.224, 0.225) if "dino" in self.model_type else (0.5, 0.5, 0.5)
+        self.mean = (0.485, 0.456, 0.406) if "dino" in self.model_type or "dinov2" in self.model_type or "radio" in self.model_type else (0.5, 0.5, 0.5)
+        self.std = (0.229, 0.224, 0.225) if "dino" in self.model_type or "dinov2" in self.model_type or "radio" in self.model_type else (0.5, 0.5, 0.5)
 
         self._feats = []
         self.hook_handlers = []
@@ -64,14 +64,15 @@ class ViTExtractor:
 
     @staticmethod
     def create_model(model_type: str, model_local_dir=None) -> nn.Module:
-        """
+        f"""
         :param model_type: a string specifying which model to load. [dino_vits8 | dino_vits16 | dino_vitb8 |
                            dino_vitb16 | vit_small_patch8_224 | vit_small_patch16_224 | vit_base_patch8_224 |
-                           vit_base_patch16_224]
+                           vit_base_patch16_224 | radio_v2_b | radio_v2_l | radio_v2_h | radio_v2_g | dinov2_vits14 | dinov2_vitb14 | dinov2_vitl14 ]
         :return: the model
         """
         torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
         if 'dinov2' in model_type:
+            # https://github.com/facebookresearch/dinov2?tab=readme-ov-file#pretrained-backbones-via-pytorch-hub
             if model_local_dir is not None:
                 model = torch.hub.load(model_local_dir, model=model_type, source='local')
             else:
@@ -81,6 +82,13 @@ class ViTExtractor:
                 model = torch.hub.load(model_local_dir, model=model_type, source='local')
             else:
                 model = torch.hub.load('facebookresearch/dino:main', model_type)
+        elif 'radio' in model_type:
+            # https://github.com/NVlabs/RADIO?tab=readme-ov-file#metrics
+
+            if model_local_dir is not None:
+                model = torch.hub.load(model_local_dir, model=model_type, source='local')
+            else:
+                model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_type)
         else:  # model from timm -- load weights from timm to dino model (enables working on arbitrary size images).
             temp_model = timm.create_model(model_type, pretrained=True)
             model_type_dict = {
@@ -331,7 +339,7 @@ class ViTExtractor:
         :param bin: apply log binning to the descriptor. default is False.
         :return: tensor of descriptors. Bx1xtxd' where d' is the dimension of the descriptors.
         """
-        assert facet in ['key', 'query', 'value', 'token'], f"""{facet} is not a supported facet for descriptors. 
+        assert facet in ['key', 'query', 'value', 'token', 'attn'], f"""{facet} is not a supported facet for descriptors. 
                                                              choose from ['key' | 'query' | 'value' | 'token'] """
         self._extract_features(batch, [layer], facet)
         x = self._feats[0]
@@ -375,6 +383,9 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 if __name__ == "__main__":
+    print(torch.hub.list('facebookresearch/dinov2'))
+    print(torch.hub.list('NVlabs/RADIO'))
+
     parser = argparse.ArgumentParser(description='Facilitate ViT Descriptor extraction.')
     parser.add_argument('--image_path', type=str, required=True, help='path of the extracted image.')
     parser.add_argument('--output_path', type=str, help='path to file containing extracted descriptors.')
@@ -391,6 +402,7 @@ if __name__ == "__main__":
     parser.add_argument('--bin', default='False', type=str2bool, help="create a binned descriptor if True.")
     parser.add_argument('--patch_size', default=8, type=int, help="patch size of the model.")
     args = parser.parse_args()
+
 
     with torch.no_grad():
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
