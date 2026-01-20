@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import fiftyone as fo
 import fiftyone.zoo as foz
@@ -12,7 +12,7 @@ from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
 class Config:
     images_dir: str
     labels_path: str
-    results_path: str
+    results: dict[str, str] = field(default_factory=dict)  # name -> json path
     dataset_name: str = "coco-keypoints-gt"
 
 
@@ -56,26 +56,27 @@ def main(config: Config):
         coco_sample.save()
 
 
-    # add the predictions.
-    predictions = json.load(open(config.results_path))
-    predictions = CocoKeypointsResultDataset.model_validate(predictions)
-    for prediction in predictions.root:
-        img_id = prediction.image_id
-        coco_sample = coco_image_id_to_sample[img_id]
-        keypoints = prediction.keypoints
-        keypoint_scores = prediction.keypoint_scores
-        fo_keypoints = []
-        H,W = coco_sample.metadata["height"], coco_sample.metadata["width"]
-        for i in range(len(keypoints)//3):
-            u,v,vis = keypoints[i*3:(i+1)*3]
-            if vis == 0:
-                continue
-            u = u / W
-            v = v /H
-            confidence = keypoint_scores[i]
-            fo_keypoints.append(fo.Keypoint(points=[[u,v]],label = category_keypoint_names[i], confidence=[confidence], name=category_keypoint_names[i]))
-        coco_sample["predictions"] = fo.Keypoints(keypoints=fo_keypoints)
-        coco_sample.save()
+    # add the predictions for each result file
+    for result_name, results_path in config.results.items():
+        predictions = json.load(open(results_path))
+        predictions = CocoKeypointsResultDataset.model_validate(predictions)
+        for prediction in predictions.root:
+            img_id = prediction.image_id
+            coco_sample = coco_image_id_to_sample[img_id]
+            keypoints = prediction.keypoints
+            keypoint_scores = prediction.keypoint_scores
+            fo_keypoints = []
+            H,W = coco_sample.metadata["height"], coco_sample.metadata["width"]
+            for i in range(len(keypoints)//3):
+                u,v,vis = keypoints[i*3:(i+1)*3]
+                if vis == 0:
+                    continue
+                u = u / W
+                v = v /H
+                confidence = keypoint_scores[i]
+                fo_keypoints.append(fo.Keypoint(points=[[u,v]],label = category_keypoint_names[i], confidence=[confidence], name=category_keypoint_names[i]))
+            coco_sample[result_name] = fo.Keypoints(keypoints=fo_keypoints)
+            coco_sample.save()
 
 
 
@@ -90,19 +91,28 @@ if __name__ == "__main__":
     config = Config(
         images_dir="/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256",
         labels_path="/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json",
-        results_path="/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dino/tshirt/1/resize_2025_results.json",
+        results={
+            "dino": "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dino/tshirt/1/resize_2025_results.json",
+            "dift": "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dift/tshirt/1/resize_2025_results.json",
+            # Add more result files here with different names:
+            # "model_v2": "/path/to/other_results.json",
+        },
         dataset_name="coco-keypoints-gt"
     )
 
     # config = Config(
     #     labels_path="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_tvmonitor_test.json",
-    #     results_path="/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/tvmonitor/1/resize_2026_results.json",
+    #     results={
+    #         "predictions": "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/tvmonitor/1/resize_2026_results.json",
+    #     },
     #     images_dir="/home/tlips/Code/few-shot-keypoints/data/SPair-71k"
     # )
 
     # config = Config(
     #     labels_path="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json",
-    #     results_path="/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/aeroplane/1/resize_2026_results.json",
+    #     results={
+    #         "predictions": "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/aeroplane/1/resize_2026_results.json",
+    #     },
     #     images_dir="/home/tlips/Code/few-shot-keypoints/data/SPair-71k"
     # )
 
