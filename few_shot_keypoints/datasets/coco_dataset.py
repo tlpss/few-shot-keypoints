@@ -225,7 +225,7 @@ class TorchCOCOKeypointsDataset:
 
 
 if __name__ == "__main__":
-    data_path = "/home/tlips/Code/droid/data/SPair-71k/SPAIR_coco_aeroplane_test.json"
+    data_path = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json"
     from few_shot_keypoints.datasets.augmentations import MultiChannelKeypointsCompose,  A
     from few_shot_keypoints.datasets.transforms import RESIZE_TRANSFORM, revert_resize_transform
     import cv2

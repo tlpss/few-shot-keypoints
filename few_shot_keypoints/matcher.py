@@ -32,7 +32,7 @@ class KeypointFeatureMatcher:
     
     Used for correspondence matching.
     """
-    def __init__(self, reference_vectors: torch.Tensor, top_k_matches: List[int] = None, min_distance_between_matches: int = 50, device: str = "cuda:0"):
+    def __init__(self, reference_vectors: torch.Tensor, top_k_matches: List[int] = None, min_distance_between_topk_matches: int = 50, device: str = "cuda:0"):
         # D dimensional vectors.
         self.reference_vectors = reference_vectors.to(device)
         assert len(self.reference_vectors.shape) == 2, "Reference vectors must be a 2D tensor"
@@ -41,7 +41,7 @@ class KeypointFeatureMatcher:
         else:
             self.top_k_matches = top_k_matches
             assert len(self.top_k_matches) == len(reference_vectors), "Top k matches must be the same length as reference vectors"
-        self.min_distance_between_matches = min_distance_between_matches
+        self.min_distance_between_topk_matches = min_distance_between_topk_matches
         self.device = torch.device(device)
 
 
@@ -85,7 +85,7 @@ class KeypointFeatureMatcher:
                 # set square around the keypoint to zero, so that next best match is not in that neighborhood. (otherwise they would all be at adjacent pixels..)
                 # TODO: make this a circle?
                 if i < self.top_k_matches[ref_idx] - 1:
-                    padding = self.min_distance_between_matches
+                    padding = self.min_distance_between_topk_matches
                     #TODO: limit to square within image bounds
                     ref_cos_map[v-padding:v+padding,u-padding:u+padding] = -1 
             results.append(ref_results)
@@ -95,6 +95,10 @@ class KeypointFeatureMatcher:
 
     @staticmethod
     def custom_cos_sim(image_features: torch.Tensor, reference_vectors: torch.Tensor) -> torch.Tensor:
+        """
+        this proved to be faster than the default cosine similarity function in torch.nn.functional.cosine_similarity
+        for some reason? I might be doing something wrong here..
+        """
         normalized_image_features = image_features / image_features.norm(dim=1, keepdim=True,p=2)
         normalized_reference_vectors = reference_vectors / reference_vectors.norm(dim=1, keepdim=True,p=2)
         # epsilon to avoid division by zero
@@ -128,7 +132,7 @@ if __name__ == "__main__":
     n_vectors = 1
     reference_vectors = torch.randint(0, 255, (n_vectors, 1000)) /255.0   
     reference_vectors = reference_vectors.to("cuda:1")
-    matcher = KeypointFeatureMatcher(reference_vectors, top_k_matches=[2] * n_vectors, min_distance_between_matches=50, device="cuda:1")
+    matcher = KeypointFeatureMatcher(reference_vectors, top_k_matches=[2] * n_vectors, min_distance_between_topk_matches=50, device="cuda:1")
     image_features = torch.randint(0, 255, (1, 1000, 256, 256)) /255.0
     image_features = image_features.to("cuda:1")
     mask = torch.ones(256, 256) == 1

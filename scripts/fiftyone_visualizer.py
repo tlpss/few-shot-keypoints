@@ -88,32 +88,34 @@ def main(config: Config):
 
 if __name__ == "__main__":
     # Example usage: fill in your paths here
+    # config = Config(
+    #     images_dir="/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256",
+    #     labels_path="/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json",
+    #     results={
+    #         "dino": "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dino/tshirt/1/resize_2025_results.json",
+    #         "dift": "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dift/tshirt/1/resize_2025_results.json",
+    #         # Add more result files here with different names:
+    #         # "model_v2": "/path/to/other_results.json",
+    #     },
+    #     dataset_name="coco-keypoints-gt"
+    # )
+
+    from few_shot_keypoints.paths import DSD_MUGS_TEST_JSON
+    # config = Config(
+    #     images_dir="/home/tlips/Code/few-shot-keypoints/data/dsd/lab-mugs_resized_512x512",
+    #     labels_path=DSD_MUGS_TEST_JSON,
+    #     results={
+    #         "dino": "/home/tlips/Code/few-shot-keypoints/test.json",
+    #     },
+    #     dataset_name="coco-keypoints-gt"
+    # )
+
     config = Config(
-        images_dir="/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256",
-        labels_path="/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json",
+        images_dir="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/",
+        labels_path="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json",
         results={
-            "dino": "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dino/tshirt/1/resize_2025_results.json",
-            "dift": "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dift/tshirt/1/resize_2025_results.json",
-            # Add more result files here with different names:
-            # "model_v2": "/path/to/other_results.json",
+            "dino": "/home/tlips/Code/few-shot-keypoints/test.json",
         },
         dataset_name="coco-keypoints-gt"
     )
-
-    # config = Config(
-    #     labels_path="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_tvmonitor_test.json",
-    #     results={
-    #         "predictions": "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/tvmonitor/1/resize_2026_results.json",
-    #     },
-    #     images_dir="/home/tlips/Code/few-shot-keypoints/data/SPair-71k"
-    # )
-
-    # config = Config(
-    #     labels_path="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json",
-    #     results={
-    #         "predictions": "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/aeroplane/1/resize_2026_results.json",
-    #     },
-    #     images_dir="/home/tlips/Code/few-shot-keypoints/data/SPair-71k"
-    # )
-
     main(config)

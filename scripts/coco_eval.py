@@ -1,13 +1,14 @@
 from pycocotools.coco import COCO
-
+from pycocotools.cocoeval import COCOeval
 import numpy as np
 from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset
 import json
 
 # Your annotation and result files
-annFile = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_train_test.json"
+annFile = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json"
 resFile = "/home/tlips/Code/few-shot-keypoints/test.json"
-
+# annFile = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_tvmonitor_test.json"
+# resFile = "/home/tlips/Code/few-shot-keypoints/test.json"
 with open(annFile, "r") as f:
     coco_dataset = CocoKeypointsDataset(**json.load(f))
 n_keypoints = len(coco_dataset.categories[0].keypoints)

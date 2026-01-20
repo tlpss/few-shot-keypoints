@@ -2,7 +2,7 @@ from functools import partial
 import glob
 import os
 import pandas as pd
-data_dir = "results/SPAIR-support-sets"
+data_dir = "results/SPAIR-correspondences" 
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset, CocoKeypointsDataset
 from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
 from few_shot_keypoints.results import calculate_mAP, is_TP_by_fraction_of_max_bbox_size, match_keypoints, calculate_image_PCK, calculate_median_keypoint_distance, calculate_average_keypoint_distance
@@ -51,5 +51,5 @@ df = pd.DataFrame(d)
 print(df)
 
 # save to csv
-df.to_csv("results/SPAIR-support-sets.csv", index=False)
+df.to_csv("results/SPAIR-correspondences/SPAIR-correspondences.csv", index=False)
 

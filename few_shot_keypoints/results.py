@@ -3,7 +3,6 @@ from functools import partial
 from typing import Callable, List, Optional, Tuple
 from airo_dataset_tools.data_parsers.coco import CocoInstanceAnnotation, CocoKeypointsDataset
 from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
-from few_shot_keypoints.matcher import KeypointListMatcher
 import numpy as np
 import sklearn
 
@@ -246,11 +245,11 @@ def calculate_confidence_correlation(matched_predictions: List[MatchedPrediction
 if __name__ == "__main__":
     from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
     from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset
-    from few_shot_keypoints.matcher import KeypointListMatcher
     import json
 
-    coco_json = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json"
-    coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dift/aeroplane/1/resize_2025_results.json"
+    coco_json = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_bicycle_test.json"
+    coco_results_json = "/home/tlips/Code/few-shot-keypoints/test.json"
+    # coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/aeroplane/1/resize_2028_results.json"
     # coco_json = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
     # coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dift/tshirt/1/resize_2025_results.json"
 

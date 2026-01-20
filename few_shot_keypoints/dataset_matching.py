@@ -8,93 +8,135 @@
 import random
 from typing import Callable, List
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
-from airo_dataset_tools.data_parsers.coco import CocoInstanceAnnotation, CocoKeypointsDataset
 from tqdm import tqdm
 from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultAnnotation, CocoKeypointsResultDataset
-from few_shot_keypoints.matcher import KeypointListMatcher
+from few_shot_keypoints.matcher import KeypointFeatureMatcher
+from few_shot_keypoints.featurizers.base import BaseFeaturizer
+import torch
 
+def run_coco_dataset_inference(
+    coco_dataset: TorchCOCOKeypointsDataset,
+    keypoint_matcher: KeypointFeatureMatcher,
+    feature_extractor: BaseFeaturizer,
+    transform_reverter: Callable,
+) -> CocoKeypointsResultDataset:
+    """
+    Run inference on a COCO dataset using a keypoint matcher and a feature extractor.
 
-def run_coco_dataset_inference(coco_dataset: TorchCOCOKeypointsDataset, keypoint_matcher: KeypointListMatcher, transform_reverter: Callable) -> CocoKeypointsResultDataset:
+    the transform_reverter is used to revert the transform applied to the images in the dataset before storing the keypoint results.
+    This allows for easy comparison with the ground truth keypoints. 
+    """
 
     coco_results_annotations = []
- 
+
     for i in tqdm(range(len(coco_dataset))):
         datapoint = coco_dataset[i]
         image = datapoint["image"]
         image = image.unsqueeze(0)
-        results = keypoint_matcher.get_keypoints(image)
+
+        features = feature_extractor.extract_features(image)
+        results = keypoint_matcher.get_best_matches_from_image_features(features)
+
         keypoints = []
-        visibilities =[]
-        for result in results:
-            if result.u is not None and result.v is not None:
+        visibilities = []
+        scores = []
+        for result_list in results:
+            if len(result_list) > 0 and result_list[0].u is not None and result_list[0].v is not None:
+                assert len(result_list) == 1, "Expected only 1 match for each keypoint category."
+                # COCO can only have 1 keypoint per category. 
+                result = result_list[0]
                 keypoints.append((result.u, result.v))
                 visibilities.append(2)
+                scores.append(result.score)
             else:
-                keypoints.append((0,0))
+                keypoints.append((0, 0))
                 visibilities.append(0)
 
-        keypoints = transform_reverter(keypoints, datapoint["original_image_size"], image.shape[2:])
-        flattened_keypoints =[]
-        for kp,vis in zip(keypoints, visibilities):
+        keypoints = transform_reverter(
+            keypoints, datapoint["original_image_size"], image.shape[2:]
+        )
+        flattened_keypoints = []
+        for kp, vis in zip(keypoints, visibilities):
             flattened_keypoints.append(kp[0])
             flattened_keypoints.append(kp[1])
             flattened_keypoints.append(vis)
-       
+
         coco_image_id = datapoint["coco_image_id"]
         coco_category_id = datapoint["coco_category_id"]
-        coco_results_annotations.append(CocoKeypointsResultAnnotation(
-            id=i,
-            image_id=coco_image_id,
-            category_id=coco_category_id,
-            bbox=datapoint["bbox"],
-            keypoints=flattened_keypoints,
-            score=sum([result.score for result in results])/len(results), 
-            keypoint_scores=[result.score for result in results]
-        ))
-        #print(f"image {coco_image_id} predicted keypoints: {keypoints}, ground truth keypoints: {datapoint['keypoints']}")
+        coco_results_annotations.append(
+            CocoKeypointsResultAnnotation(
+                id=i,
+                image_id=coco_image_id,
+                category_id=coco_category_id,
+                bbox=datapoint["bbox"],
+                keypoints=flattened_keypoints,
+                score=sum(scores) / len(scores),
+                keypoint_scores=scores,
+            )
+        )
+        # print(f"image {coco_image_id} predicted keypoints: {keypoints}, ground truth keypoints: {datapoint['keypoints']}")
 
     coco_results_dataset = CocoKeypointsResultDataset(coco_results_annotations)
 
     return coco_results_dataset
 
-def populate_matcher_w_random_references(coco_dataset: TorchCOCOKeypointsDataset, matcher: KeypointListMatcher, N: int = 5, seed=2025):
-    random.seed(seed)
-    for i in range(len(coco_dataset.parsed_coco.categories[0].keypoints)):
-        while not len(matcher.matchers[i].reference_images) == N:
-            idx = random.randint(0, len(coco_dataset)-1)
-            image = coco_dataset[idx]["image"]
-            image = image.unsqueeze(0)
-            if len(coco_dataset[idx]["keypoints"][i]) > 0:
-                matcher.matchers[i].add_reference_image(image, coco_dataset[idx]["keypoints"][i][0])
-            else:
-                print(f"no keypoints for {coco_dataset.parsed_coco.categories[0].keypoints[i]}")
-                pass
+
+def populate_matcher_w_random_references(
+    coco_dataset: TorchCOCOKeypointsDataset,
+    feature_extractor: BaseFeaturizer,
+    seed: int = 2025,
+):
+    """
+    Populate each keypoint matcher with N random reference images that contain
+    at least one annotation for that keypoint.
+    """
+    reference_vectors = [None] * len(coco_dataset.parsed_coco.categories[0].keypoints)
+    # sample random images, until we find a reference vector for each keypoint type
+    rng = random.Random(seed)
+    while any(rv is None for rv in reference_vectors):
+        idx = rng.randint(0, len(coco_dataset) - 1)
+        image = coco_dataset[idx]["image"]
+        image = image.unsqueeze(0)
+        features = feature_extractor.extract_features(image)
+        keypoints = coco_dataset[idx]["keypoints"]
+        for i in range(len(reference_vectors)):
+            if reference_vectors[i] is None and len(keypoints[i]) > 0:
+                u,v = keypoints[i][0]
+                u,v = int(u), int(v)
+                reference_vectors[i] = features[0,:,v,u].clone()
+        n_found = sum(rv is not None for rv in reference_vectors)
+        print(f"found {n_found} reference vectors")
+    return torch.stack(reference_vectors)
 
 if __name__ == "__main__":
     from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer
     from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
     from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
     from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset as CocoParser
-    from few_shot_keypoints.matcher import KeypointFeatureMatcher, KeypointListMatcher
+    from few_shot_keypoints.matcher import KeypointFeatureMatcher
     import albumentations as A
     from albumentations.pytorch import ToTensorV2
     from few_shot_keypoints.datasets.transforms import RESIZE_TRANSFORM, revert_resize_transform
     import json
-    coco_json_path = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_tvmonitor_test.json"
+    from few_shot_keypoints.paths import DSD_MUGS_TEST_JSON
+
+    coco_json_path = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_bicycle_test.json"
 
     with open(coco_json_path, "r") as f:
         coco_dataset = CocoParser(**json.load(f))
+
     target_path ="test.json"
-    # feature_extractor = ViTFeaturizer(device='cuda', hf_model_name="facebook/dinov2-small")
-    feature_extractor = SDFeaturizer(device='cuda')
+    feature_extractor = ViTFeaturizer(device='cuda:0', hf_model_name="facebook/dinov2-small")
+    # feature_extractor = SDFeaturizer(device='cuda')
 
     keypoint_types = coco_dataset.categories[0].keypoints
-    matchers = [KeypointFeatureMatcher(feature_extractor) for _ in keypoint_types]
-    matcher = KeypointListMatcher(keypoint_channels=keypoint_types, matchers=matchers)
+
     coco_dataset = TorchCOCOKeypointsDataset(json_dataset_path=coco_json_path,transform=RESIZE_TRANSFORM)
 
-    populate_matcher_w_random_references(coco_dataset, matcher, N=2, seed=2025)
-    coco_results_dataset = run_coco_dataset_inference(coco_dataset, matcher,transform_reverter=revert_resize_transform)
+    reference_vectors = populate_matcher_w_random_references(coco_dataset, feature_extractor, seed=2029)
+    matcher = KeypointFeatureMatcher(reference_vectors, device='cuda:0')
+
+    coco_results_dataset = run_coco_dataset_inference(coco_dataset, matcher, feature_extractor, transform_reverter=revert_resize_transform)
     with open(target_path, "w") as f:
         f.write(coco_results_dataset.model_dump_json(indent=4))
 
