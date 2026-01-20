@@ -45,9 +45,9 @@ class KeypointFeatureMatcher:
         self.device = torch.device(device)
 
 
-    def get_best_matches_from_image(self, image: torch.Tensor, mask:Optional[torch.Tensor] = None) -> List[List[MatchingResult]]:
-        image_features = self.keypoint_featurizer.extract_features(image).to(self.device)
-        return self.get_best_matches_from_image_features(image_features, mask)
+    # def get_best_matches_from_image(self, image: torch.Tensor, mask:Optional[torch.Tensor] = None) -> List[List[MatchingResult]]:
+    #     image_features = self.keypoint_featurizer.extract_features(image).to(self.device)
+    #     return self.get_best_matches_from_image_features(image_features, mask)
 
     def get_best_matches_from_image_features(self, image_features: torch.Tensor, mask:Optional[torch.Tensor] = None) -> List[List[MatchingResult]]:
         self.validate_image_features_input(image_features)

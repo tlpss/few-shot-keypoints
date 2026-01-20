@@ -24,8 +24,8 @@ class FeaturizerRegistry:
             if not issubclass(feat_cls, BaseFeaturizer):
                 raise TypeError("FeaturizerRegistry.register can only be used on BaseFeaturizer subclasses")
             key = (name or getattr(feat_cls, "NAME", None) or feat_cls.__name__).lower()
-            if key in cls._registry and cls._registry[key] is not feat_cls:
-                raise ValueError(f"Featurizer name already registered: {key}")
+            # if key in cls._registry and cls._registry[key] is not feat_cls:
+            #     raise ValueError(f"Featurizer name already registered: {key}")
             cls._registry[key] = feat_cls
             return feat_cls
 
