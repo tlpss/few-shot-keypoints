@@ -206,7 +206,7 @@ class SDFeaturizer(BaseFeaturizer):
 
 
     """
-    def __init__(self, sd_id='stabilityai/stable-diffusion-2-1-base',device='cuda', default_t=261, default_up_ft_index=1, default_ensemble_size=1):
+    def __init__(self, sd_id='Manojb/stable-diffusion-2-1-base',device='cuda', default_t=261, default_up_ft_index=1, default_ensemble_size=1):
         self.device = device
         unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet")
         onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
