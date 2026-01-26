@@ -6,7 +6,7 @@ from typing import Callable, Dict, List
 import torch
 
 # Featurizers
-from few_shot_keypoints.featurizers import FeaturizerRegistry
+from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
 from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
 
 
@@ -69,8 +69,8 @@ def main():
         default=",".join(FeaturizerRegistry.list()),
         help="Comma-separated list of featurizers: dinov2-s,dinov2-b,dinov2-l,dinov3-s,dinov3-b,dinov3-l,radio-b,radio-l",
     )
-    parser.add_argument("--height", type=int, default=512, help="Image height")
-    parser.add_argument("--width", type=int, default=512, help="Image width")
+    parser.add_argument("--height", type=int, default=480, help="Image height")
+    parser.add_argument("--width", type=int, default=640, help="Image width")
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
     parser.add_argument("--repeats", type=int, default=50, help="Timed repetitions")
     parser.add_argument("--warmup", type=int, default=10, help="Warmup iterations")

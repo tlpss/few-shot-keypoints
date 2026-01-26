@@ -19,7 +19,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "torch>=2.7.1",
     "torchvision",
-    "transformers>=4.56.0",
+    "transformers>=4.56.0", # SAM3 requires transformers 5.0.0 or higher
     "xformers",
 ]
 
