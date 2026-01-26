@@ -1,5 +1,5 @@
 from few_shot_keypoints.featurizers.base import BaseFeaturizer
-from few_shot_keypoints.featurizers.dino_vit_paper.extractor_skil import ViTExtractor
+from few_shot_keypoints.featurizers.dino_features_paper.extractor_skil import ViTExtractor
 from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
 import torch
 from torchvision import transforms
@@ -64,7 +64,7 @@ class Dinov2sPaperFeaturizer(ViTPaperFeaturizer):
 @FeaturizerRegistry.register("dino-paper")
 class DinoPaperFeaturizer(ViTPaperFeaturizer):
     def __init__(self, device: str = 'cuda:0'):
-        # dinov1 - same as in the paper.
+        # dinov1 - same as in the paper but had to disable bin_features to fit in memory..
         super().__init__(model_type='dino_vits8', stride=4, device=device, layer=9, facet='key', use_bin_features=False)
 
 @FeaturizerRegistry.register("dinov2-s-paper-hf-equivalent")

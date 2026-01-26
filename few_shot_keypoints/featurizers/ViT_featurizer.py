@@ -1,3 +1,7 @@
+import warnings
+# Suppress RADIOv2 timm registry overwrite warnings (harmless)
+warnings.filterwarnings("ignore", message="Overwriting .* in registry")
+
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModel, BitImageProcessor
 import torch
