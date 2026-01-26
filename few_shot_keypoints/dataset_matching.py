@@ -52,9 +52,10 @@ def run_coco_dataset_inference(
                 keypoints.append((0, 0))
                 visibilities.append(0)
 
-        keypoints = transform_reverter(
-            keypoints, datapoint["original_image_size"], image.shape[2:]
-        )
+        if transform_reverter is not None:
+            keypoints = transform_reverter(
+                keypoints, datapoint["original_image_size"], image.shape[2:]
+            )
         flattened_keypoints = []
         for kp, vis in zip(keypoints, visibilities):
             flattened_keypoints.append(kp[0])
@@ -95,6 +96,7 @@ def populate_matcher_w_random_references(
     rng = random.Random(seed)
     while any(rv is None for rv in reference_vectors):
         idx = rng.randint(0, len(coco_dataset) - 1)
+        print(f"sampling random image {idx}")
         image = coco_dataset[idx]["image"]
         image = image.unsqueeze(0)
         features = feature_extractor.extract_features(image)

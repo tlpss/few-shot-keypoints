@@ -1,6 +1,7 @@
 import os
 import json
 from pathlib import Path
+from typing import Optional
 import numpy as np
 import torch
 from tqdm import trange
@@ -21,6 +22,7 @@ class Config:
     featurizer: str = "dino" # or "dift"
     transform : str = "resize" # or "resize_max_and_pad"
     output_base_dir: str = "results/SPAIR-support-sets"
+    dataset_name: Optional[str] = None
 
 #@draccus.wrap()
 def match_dataset(config: Config):
@@ -31,6 +33,9 @@ def match_dataset(config: Config):
     elif config.transform == "resize_max_and_pad":
         transform  = MAX_LENGTH_RESIZE_AND_PAD_TRANSFORM
         transform_reverter = revert_max_length_resize_and_pad_transform
+    elif config.transform == "none":
+        transform = None
+        transform_reverter = None
     else:
         raise ValueError(f"Invalid transform: {config.transform}")
 
@@ -39,8 +44,11 @@ def match_dataset(config: Config):
     # load test dataset 
     test_dataset = TorchCOCOKeypointsDataset(config.test_dataset_path, transform=transform)
 
-    category = train_dataset.parsed_coco.categories[0].name
-    filename = Path(config.output_base_dir) / f"{config.featurizer}" / category / f"{config.transform}_{config.seed}_results.json"
+    if config.dataset_name is not None:
+        name = config.dataset_name
+    else:
+        name = train_dataset.parsed_coco.categories[0].name
+    filename = Path(config.output_base_dir) / f"{config.featurizer}" / name / f"{config.transform}_{config.seed}_results.json"
     if filename.exists():
         print(f"Results already exist for {filename}")
         return
