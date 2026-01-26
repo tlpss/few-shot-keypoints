@@ -17,7 +17,7 @@ from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from diffusers import DDIMScheduler
 from diffusers import StableDiffusionPipeline
 
-from few_shot_keypoints.featurizers.base import BaseFeaturizer, FeaturizerCache
+from few_shot_keypoints.featurizers.base import BaseFeaturizer
 from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
 
 class MyUNet2DConditionModel(UNet2DConditionModel):
@@ -183,6 +183,7 @@ class OneStepSDPipeline(StableDiffusionPipeline):
         cross_attention_kwargs: Optional[Dict[str, Any]] = None
     ):
 
+        #TODO: make deterministic for reproducibility
         device = self._execution_device
         latents = self.vae.encode(img_tensor).latent_dist.sample() * self.vae.config.scaling_factor
         t = torch.tensor(t, dtype=torch.long, device=device)
@@ -206,8 +207,11 @@ class SDFeaturizer(BaseFeaturizer):
 
 
     """
-    def __init__(self, sd_id='Manojb/stable-diffusion-2-1-base',device='cuda', default_t=261, default_up_ft_index=1, default_ensemble_size=1):
-        self.device = device
+    def __init__(self, sd_id='sd2-community/stable-diffusion-2-1',image_resize_size=None,device='cuda',
+     default_t=261, default_up_ft_index=1, default_ensemble_size=1):
+        """
+        image_resize_size: tuple of int, (height, width) that the image is resized to before being passed to the model. If None, the image is not resized.
+        """
         unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet")
         onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
         onestep_pipe.vae.decoder = None
@@ -221,7 +225,9 @@ class SDFeaturizer(BaseFeaturizer):
         self.default_t = default_t
         self.default_up_ft_index = default_up_ft_index
         self.default_ensemble_size = default_ensemble_size
-    @FeaturizerCache
+        self.image_resize_size = image_resize_size
+        self.device = self.pipe.device
+
     @torch.no_grad()
     def extract_features(self,
                 img_tensor, 
@@ -246,13 +252,15 @@ class SDFeaturizer(BaseFeaturizer):
         ensemble_size = self.default_ensemble_size if ensemble_size is None else ensemble_size
 
         # copy tensor 
-        img_tensor = img_tensor.clone()
-
+        resized_img_tensor = img_tensor.clone()
+        
+        if self.image_resize_size is not None:
+            resized_img_tensor = F.interpolate(resized_img_tensor, size=self.image_resize_size, mode='bilinear', align_corners=False)
         # normalize to [-1,1], because that is how SD was trained 
         # cf https://github.com/huggingface/diffusers/blob/bc55b631fdf3d0961c27ec548b1155d1fccf0424/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_img2img.py#L115
-        img_tensor = img_tensor * 2 - 1
+        resized_img_tensor = resized_img_tensor * 2 - 1
 
-        img_tensor = img_tensor.repeat(ensemble_size, 1, 1, 1).to(self.device)   # ensem, c, h, w
+        resized_img_tensor = resized_img_tensor.repeat(ensemble_size, 1, 1, 1).to(self.device)   # ensem, c, h, w
 
         prompt_embeds,neg_prompt_embeds = self.pipe.encode_prompt(
             prompt=prompt,
@@ -262,7 +270,7 @@ class SDFeaturizer(BaseFeaturizer):
 
         prompt_embeds = prompt_embeds.repeat(ensemble_size, 1, 1)
         unet_ft_all = self.pipe(
-            img_tensor=img_tensor,
+            img_tensor=resized_img_tensor,
             t=t,
             up_ft_indices=[up_ft_index],
             prompt_embeds=prompt_embeds)
@@ -270,29 +278,151 @@ class SDFeaturizer(BaseFeaturizer):
         unet_ft = unet_ft.mean(0, keepdim=True) # 1,c,H//patch_size,W//patch_size
         
         
-        # upsample to original size (latents are /8) 
+        # upsample to original image size (latents are /8 and might be resized before inference)
         unet_ft = F.interpolate(unet_ft, size=(img_tensor.shape[2], img_tensor.shape[3]), mode='bilinear', align_corners=False) # 1,D,h,w
-
 
         return unet_ft
 
-@FeaturizerRegistry.register("dift-sd2.1-e1")
-class SDFeaturizerSD21E1(SDFeaturizer):
+# 2.1 base models (512x512)
+@FeaturizerRegistry.register("dift-sd2.1b-e1")
+class SDFeaturizerSD21baseE1(SDFeaturizer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.default_ensemble_size = 1
 
-@FeaturizerRegistry.register("dift-sd2.1-e8")
-class SDFeaturizerSD21E8(SDFeaturizer):
+@FeaturizerRegistry.register("dift-sd2.1b-e2")
+class SDFeaturizerSD21baseE2(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 2
+
+@FeaturizerRegistry.register("dift-sd2.1b-e4")
+class SDFeaturizerSD21baseE4(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 4
+
+@FeaturizerRegistry.register("dift-sd2.1b-e8")
+class SDFeaturizerSD21baseE8(SDFeaturizer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.default_ensemble_size = 8
 
 
+# 2.1 base with explicit resizes to the native 512x512 input size
+@FeaturizerRegistry.register("dift-sd2.1b-e1-r512")
+class SDFeaturizerSD21baseE1R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 1
+        self.image_resize_size = (512, 512)
 
+@FeaturizerRegistry.register("dift-sd2.1b-e2-r512")
+class SDFeaturizerSD21baseE2R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 2
+        self.image_resize_size = (512, 512)
+
+@FeaturizerRegistry.register("dift-sd2.1b-e4-r512")
+class SDFeaturizerSD21baseE4R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 4
+        self.image_resize_size = (512, 512)
+
+@FeaturizerRegistry.register("dift-sd2.1b-e8-r512")
+class SDFeaturizerSD21baseE8R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.default_ensemble_size = 8
+        self.image_resize_size = (512, 512)
+
+# sd2.1 finetuned models, which have native 768x768 input size
+@FeaturizerRegistry.register("dift-sd2.1-e1")
+class SDFeaturizerSD21E1(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 1
+
+@FeaturizerRegistry.register("dift-sd2.1-e2")
+class SDFeaturizerSD21E2(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 2
+
+@FeaturizerRegistry.register("dift-sd2.1-e4")
+class SDFeaturizerSD21E4(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 4
+
+@FeaturizerRegistry.register("dift-sd2.1-e8")
+class SDFeaturizerSD21E8(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 8
+
+# same but with explicit resizes to the native 768x768 input size
+@FeaturizerRegistry.register("dift-sd2.1-e1-r768")
+class SDFeaturizerSD21E1R768(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 1
+        self.image_resize_size = (768, 768)
+
+@FeaturizerRegistry.register("dift-sd2.1-e2-r768")
+class SDFeaturizerSD21E2R768(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 2
+        self.image_resize_size = (768, 768)
+
+@FeaturizerRegistry.register("dift-sd2.1-e4-r768")
+class SDFeaturizerSD21E4R768(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 4
+        self.image_resize_size = (768, 768)
+
+@FeaturizerRegistry.register("dift-sd2.1-e8-r768")
+class SDFeaturizerSD21E8R768(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 8
+        self.image_resize_size = (768, 768)
+
+# 2.1 models with explicit resizes to 512x512 input
+@FeaturizerRegistry.register("dift-sd2.1-e1-r512")
+class SDFeaturizerSD21E1R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 1
+        self.image_resize_size = (512, 512)
+
+@FeaturizerRegistry.register("dift-sd2.1-e2-r512")
+class SDFeaturizerSD21E2R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 2
+        self.image_resize_size = (512, 512)
+
+@FeaturizerRegistry.register("dift-sd2.1-e4-r512")
+class SDFeaturizerSD21E4R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 4
+        self.image_resize_size = (512, 512)
+
+@FeaturizerRegistry.register("dift-sd2.1-e8-r512")
+class SDFeaturizerSD21E8R512(SDFeaturizer):
+    def __init__(self, **kwargs):
+        super().__init__(sd_id='sd2-community/stable-diffusion-2-1', **kwargs)
+        self.default_ensemble_size = 8
+        self.image_resize_size = (512, 512)
 
 if __name__ == "__main__":
-    tensor = torch.randn(1, 3, 512, 512)
+    tensor = torch.randn(1, 3, 640, 480)
     featurizer = SDFeaturizer()
     ft = featurizer.extract_features(tensor, "a photo of a cat")
     print(ft.shape)
