@@ -212,8 +212,8 @@ class SDFeaturizer(BaseFeaturizer):
         """
         image_resize_size: tuple of int, (height, width) that the image is resized to before being passed to the model. If None, the image is not resized.
         """
-        unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet")
-        onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
+        unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet",torch_dtype=torch.bfloat16)
+        onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None,torch_dtype=torch.bfloat16)
         onestep_pipe.vae.decoder = None
         onestep_pipe.scheduler = DDIMScheduler.from_pretrained(sd_id, subfolder="scheduler")
         gc.collect()
@@ -227,6 +227,26 @@ class SDFeaturizer(BaseFeaturizer):
         self.default_ensemble_size = default_ensemble_size
         self.image_resize_size = image_resize_size
         self.device = self.pipe.device
+
+        self.default_prompt = ""
+        # encode the default prompt once
+        self.default_prompt_embeds, _ = self.pipe.encode_prompt(
+            prompt=self.default_prompt,
+            device=self.device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=False)
+
+
+    def _encode_prompt(self, prompt):
+        if prompt == self.default_prompt:
+            return self.default_prompt_embeds
+        else:
+            prompt_embeds, _ = self.pipe.encode_prompt(
+                prompt=prompt,
+                device=self.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=False)
+            return prompt_embeds
 
     @torch.no_grad()
     def extract_features(self,
@@ -262,22 +282,19 @@ class SDFeaturizer(BaseFeaturizer):
 
         resized_img_tensor = resized_img_tensor.repeat(ensemble_size, 1, 1, 1).to(self.device)   # ensem, c, h, w
 
-        prompt_embeds,neg_prompt_embeds = self.pipe.encode_prompt(
-            prompt=prompt,
-            device=self.device,
-            num_images_per_prompt=1,
-            do_classifier_free_guidance=False) # [1, 77, dim]
-
+        prompt_embeds = self._encode_prompt(prompt)
         prompt_embeds = prompt_embeds.repeat(ensemble_size, 1, 1)
-        unet_ft_all = self.pipe(
-            img_tensor=resized_img_tensor,
-            t=t,
-            up_ft_indices=[up_ft_index],
-            prompt_embeds=prompt_embeds)
+
+        with torch.autocast(device_type=self.device.type, dtype=self.pipe.dtype):
+            unet_ft_all = self.pipe(
+                img_tensor=resized_img_tensor,
+                t=t,
+                up_ft_indices=[up_ft_index],
+                prompt_embeds=prompt_embeds)
         unet_ft = unet_ft_all['up_ft'][up_ft_index] # ensem, c, H//patch_size, W//patch_size
         unet_ft = unet_ft.mean(0, keepdim=True) # 1,c,H//patch_size,W//patch_size
         
-        
+            
         # upsample to original image size (latents are /8 and might be resized before inference)
         unet_ft = F.interpolate(unet_ft, size=(img_tensor.shape[2], img_tensor.shape[3]), mode='bilinear', align_corners=False) # 1,D,h,w
 
