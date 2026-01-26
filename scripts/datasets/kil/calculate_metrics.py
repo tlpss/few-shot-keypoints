@@ -10,7 +10,7 @@ import pandas as pd
 from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
 from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset
 from few_shot_keypoints.paths import (
-    DSD_SHOE_TEST_JSON, DSD_MUGS_TEST_JSON
+    KIL_SHOE_V2_INITIAL_JSON,
 )
 from few_shot_keypoints.results import (
     match_keypoints,
@@ -25,12 +25,11 @@ from few_shot_keypoints.results import (
 
 # Map category names to their test JSON paths
 CATEGORY_TEST_PATHS = {
-    "shoe": str(DSD_SHOE_TEST_JSON),
-    "mug": str(DSD_MUGS_TEST_JSON),
+    "shoe-v2-initial-frames": str(KIL_SHOE_V2_INITIAL_JSON),
 }
 
 def main():
-    data_dir = "results/DSD"
+    data_dir = "results/KIL"
     
     results = []
     jsons = glob.glob(f"{data_dir}/**/*.json", recursive=True)

@@ -137,10 +137,20 @@ def generate_sam_masks(config: Config):
 
 
 if __name__ == "__main__":
-    from few_shot_keypoints.paths import DSD_SHOE_TRAIN_JSON, DSD_SHOE_TEST_JSON
-    config = Config(
-        dataset=DSD_SHOE_TEST_JSON,
-        output=DSD_SHOE_TEST_JSON.with_suffix(".with_masks.json"),
-        device="cuda",
-    )
-    generate_sam_masks(config)
+
+    # input path CLI
+    import click
+    @click.command()
+    @click.option("--input_json", type=click.Path(exists=True), required=True)
+    @click.option("--output_json", type=click.Path(exists=False), required=False, default=None)
+    def main(input_json, output_json):
+        if output_json is None:
+            input_json = Path(input_json)
+            output_json = input_json.with_suffix(".with_masks.json")
+        config = Config(
+            dataset=input_json,
+            output=output_json,
+            device="cuda",
+        )
+        generate_sam_masks(config)
+    main()    
