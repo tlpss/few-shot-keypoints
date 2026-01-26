@@ -25,7 +25,7 @@ def main(config: Config):
         data_path=config.images_dir,
         dataset_type=fo.types.COCODetectionDataset,
         labels_path=config.labels_path,
-        label_types=["detections"],
+        label_types=["detections", "segmentations"],
         include_id=True,
         include_annotation_id=True,
     )
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     #     dataset_name="coco-keypoints-gt"
     # )
 
-    from few_shot_keypoints.paths import DSD_MUGS_TEST_JSON
+    from few_shot_keypoints.paths import DSD_SHOE_TEST_JSON
     # config = Config(
     #     images_dir="/home/tlips/Code/few-shot-keypoints/data/dsd/lab-mugs_resized_512x512",
     #     labels_path=DSD_MUGS_TEST_JSON,
@@ -111,8 +111,8 @@ if __name__ == "__main__":
     # )
 
     config = Config(
-        images_dir="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/",
-        labels_path="/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_aeroplane_test.json",
+        images_dir="/home/tlips/Code/few-shot-keypoints/data/dsd/dsd-shoes-real_resized_512x512",
+        labels_path=DSD_SHOE_TEST_JSON,
         results={
             "dino": "/home/tlips/Code/few-shot-keypoints/test.json",
         },
