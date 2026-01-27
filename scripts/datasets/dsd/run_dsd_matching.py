@@ -36,29 +36,31 @@ FEATURIZERS = [
 ]
 
 def main():
-    for dataset_name, paths in DATASETS.items():
-        for featurizer in FEATURIZERS:
-            print(f"\n{'='*60}")
-            print(f"Running: {dataset_name} with {featurizer}")
-            print(f"{'='*60}")
-            
-            config = Config(
-                train_dataset_path=paths["train"],
-                test_dataset_path=paths["test"],
-                output_base_dir="results/DSD",
-                featurizer=featurizer,
-                seed=2025,
-                transform="resize",
-            )
-            
-            try:
-                match_dataset(config)
-            except Exception as e:
-                print(f"Error running {dataset_name} with {featurizer}: {e}")
-                # print stack trace
-                import traceback
-                traceback.print_exc()
-                continue
+    # Run multiple seeds, similar to KIL experiments
+    for seed in [2027, 2028]:
+        for dataset_name, paths in DATASETS.items():
+            for featurizer in FEATURIZERS:
+                print(f"\n{'='*60}")
+                print(f"Running: {dataset_name} with {featurizer} (seed={seed})")
+                print(f"{'='*60}")
+                
+                config = Config(
+                    train_dataset_path=paths["train"],
+                    test_dataset_path=paths["test"],
+                    output_base_dir="results/DSD",
+                    featurizer=featurizer,
+                    seed=seed,
+                    transform="resize",
+                )
+                
+                try:
+                    match_dataset(config)
+                except Exception as e:
+                    print(f"Error running {dataset_name} with {featurizer} (seed={seed}): {e}")
+                    # print stack trace
+                    import traceback
+                    traceback.print_exc()
+                    continue
 
 if __name__ == "__main__":
     main()

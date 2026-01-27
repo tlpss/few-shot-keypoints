@@ -24,6 +24,8 @@ from few_shot_keypoints.results import (
 )
 
 # Map category names to their test JSON paths
+# The category name corresponds to the directory name used by `match_dataset`,
+# which for DSD defaults to the COCO category name (e.g. "shoe", "mug").
 CATEGORY_TEST_PATHS = {
     "shoe": str(DSD_SHOE_TEST_JSON),
     "mug": str(DSD_MUGS_TEST_JSON),
@@ -39,9 +41,10 @@ def main():
         rel_path = os.path.relpath(abs_path, data_dir)
         parts = rel_path.split("/")
         
-        # Structure: featurizer/category/results.json
+        # Structure: featurizer/category/processing_seed_results.json
         featurizer = parts[0]
         category = parts[1]
+        processing, seed = parts[2].split("_")[0:2]
         
         print(f"\nProcessing: {rel_path}")
         
@@ -64,6 +67,8 @@ def main():
         # Calculate metrics
         row = {
             "featurizer": featurizer,
+            "processing": processing,
+            "seed": seed,
             "category": category,
             "results_path": abs_path,
             # Average keypoint distance
