@@ -22,7 +22,14 @@ DSD_MUGS_HUMAN_EVAL_JSON = DSD_MUGS_DIR / "human-eval-victor.json"
 KIL_SHOE_V2_INITIAL_DIR = KIL_DIR / "1shoe-v2-initial-frames"
 KIL_SHOE_V2_INITIAL_JSON = KIL_SHOE_V2_INITIAL_DIR / "annotations.with_masks.json"
 
+KIL_SHOE_V3_INITIAL_DIR = KIL_DIR / "1shoe-v3-initial-frames"
+KIL_SHOE_V3_INITIAL_JSON = KIL_SHOE_V3_INITIAL_DIR / "annotations.with_masks.json"
 
+KIL_MUGS_V2_INITIAL_DIR = KIL_DIR / "1mug-v2-initial-frames"
+KIL_MUGS_V2_INITIAL_JSON = KIL_MUGS_V2_INITIAL_DIR / "annotations.with_masks.json"
+
+KIL_MUGS_V3_INITIAL_DIR = KIL_DIR / "1mug-v3-initial-frames"
+KIL_MUGS_V3_INITIAL_JSON = KIL_MUGS_V3_INITIAL_DIR / "annotations.with_masks.json"
 
 if __name__ == "__main__":
     print(f"{DATA_DIR=}")

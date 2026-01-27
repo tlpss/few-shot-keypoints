@@ -1,4 +1,4 @@
-"""Calculate metrics for DSD matching results."""
+"""Calculate metrics for KIL matching results."""
 
 import glob
 import json
@@ -11,6 +11,9 @@ from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
 from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset
 from few_shot_keypoints.paths import (
     KIL_SHOE_V2_INITIAL_JSON,
+    KIL_SHOE_V3_INITIAL_JSON,
+    KIL_MUGS_V2_INITIAL_JSON,
+    KIL_MUGS_V3_INITIAL_JSON,
 )
 from few_shot_keypoints.results import (
     match_keypoints,
@@ -23,9 +26,12 @@ from few_shot_keypoints.results import (
     calculate_point_PCK,
 )
 
-# Map category names to their test JSON paths
+# Map category names (as used in `run_kil_matching.py`) to their test JSON paths
 CATEGORY_TEST_PATHS = {
     "shoe-v2-initial-frames": str(KIL_SHOE_V2_INITIAL_JSON),
+    "shoe-v3-initial-frames": str(KIL_SHOE_V3_INITIAL_JSON),
+    "mug-v2-initial-frames": str(KIL_MUGS_V2_INITIAL_JSON),
+    "mug-v3-initial-frames": str(KIL_MUGS_V3_INITIAL_JSON),
 }
 
 def main():
@@ -41,6 +47,7 @@ def main():
         # Structure: featurizer/category/results.json
         featurizer = parts[0]
         category = parts[1]
+        processing, seed = parts[2].split("_")[0:2]
         
         print(f"\nProcessing: {rel_path}")
         
@@ -63,6 +70,8 @@ def main():
         # Calculate metrics
         row = {
             "featurizer": featurizer,
+            "processing": processing,
+            "seed": seed,
             "category": category,
             "results_path": abs_path,
             # Average keypoint distance
