@@ -111,32 +111,29 @@ def populate_matcher_w_random_references(
     return torch.stack(reference_vectors)
 
 if __name__ == "__main__":
-    from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer
+    from few_shot_keypoints.featurizers.ViT_featurizer import ViTFeaturizer, DinoV3LargeFeaturizer
     from few_shot_keypoints.featurizers.dift_featurizer import SDFeaturizer
     from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
     from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset as CocoParser
     from few_shot_keypoints.matcher import KeypointFeatureMatcher
     import albumentations as A
     from albumentations.pytorch import ToTensorV2
-    from few_shot_keypoints.featurizers.dino_vit_paper.featurizer import ViTPaperFeaturizer
     from few_shot_keypoints.datasets.transforms import RESIZE_TRANSFORM, revert_resize_transform
     import json
-    from few_shot_keypoints.paths import DSD_SHOE_TEST_JSON
+    from few_shot_keypoints.paths import KIL_MUGS_V2_INITIAL_JSON
 
-    coco_json_path = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_bicycle_test.json"
-    coco_json_path = DSD_SHOE_TEST_JSON
+    coco_json_path = KIL_MUGS_V2_INITIAL_JSON
 
     with open(coco_json_path, "r") as f:
         coco_dataset = CocoParser(**json.load(f))
 
     target_path ="test.json"
-    feature_extractor = ViTFeaturizer(device='cuda:0', hf_model_name="facebook/dinov2-small")
-    feature_extractor = ViTPaperFeaturizer(device='cuda:0', model_type='dino_vits8', stride=4, layer=11, facet='key', use_bin_features=False)
+    feature_extractor = DinoV3LargeFeaturizer(device='cuda:0')
     # feature_extractor = SDFeaturizer(device='cuda')
 
     keypoint_types = coco_dataset.categories[0].keypoints
 
-    image_size = 224
+    image_size = 512
     from few_shot_keypoints.datasets.augmentations import MultiChannelKeypointsCompose
     import cv2
     transform = MultiChannelKeypointsCompose([A.Resize(image_size,image_size,interpolation=cv2.INTER_CUBIC)])

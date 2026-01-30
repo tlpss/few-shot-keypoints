@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import draccus
 
 from few_shot_keypoints.dataset_matching import populate_matcher_w_random_references, run_coco_dataset_inference
+from few_shot_keypoints.dataset_object_crop_matching import populate_matcher_w_random_references as populate_matcher_w_random_references_crop
+from few_shot_keypoints.dataset_object_crop_matching import run_coco_dataset_inference as run_coco_dataset_inference_crop
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
 from few_shot_keypoints.datasets.transforms import RESIZE_TRANSFORM, revert_resize_transform, MAX_LENGTH_RESIZE_AND_PAD_TRANSFORM, revert_max_length_resize_and_pad_transform
 from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
@@ -23,6 +25,7 @@ class Config:
     transform : str = "resize" # or "resize_max_and_pad"
     output_base_dir: str = "results/SPAIR-support-sets"
     dataset_name: Optional[str] = None
+    crop_before_matching: bool = False
 
 #@draccus.wrap()
 def match_dataset(config: Config):
@@ -59,10 +62,14 @@ def match_dataset(config: Config):
     else:
         raise ValueError(f"Invalid featurizer: {config.featurizer}")
 
-
-    # populate matcher with random reference images
-    references = populate_matcher_w_random_references(train_dataset, featurizer, seed=config.seed)
-    matcher = KeypointFeatureMatcher(references, device='cuda:0')
+    if config.crop_before_matching:
+        references = populate_matcher_w_random_references_crop(train_dataset, featurizer, seed=config.seed)
+        matcher = KeypointFeatureMatcher(references, device='cuda:0')
+        coco_results = run_coco_dataset_inference_crop(test_dataset, matcher, featurizer)
+    else:
+        # populate matcher with random reference images
+        references = populate_matcher_w_random_references(train_dataset, featurizer, seed=config.seed)
+        matcher = KeypointFeatureMatcher(references, device='cuda:0')
 
     coco_results = run_coco_dataset_inference(test_dataset, matcher, featurizer, transform_reverter=transform_reverter)
     os.makedirs(filename.parent, exist_ok=True)

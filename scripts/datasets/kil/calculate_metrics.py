@@ -34,9 +34,7 @@ CATEGORY_TEST_PATHS = {
     "mug-v3-initial-frames": str(KIL_MUGS_V3_INITIAL_JSON),
 }
 
-def main():
-    data_dir = "results/KIL"
-    
+def main(data_dir: str):
     results = []
     jsons = glob.glob(f"{data_dir}/**/*.json", recursive=True)
     
@@ -117,5 +115,7 @@ def main():
     print(f"\nResults saved to: {output_path}")
 
 if __name__ == "__main__":
-    main()
+    data_dirs = ["results/KIL", "results/KIL_crop"]
+    for data_dir in data_dirs:
+        main(data_dir)
 

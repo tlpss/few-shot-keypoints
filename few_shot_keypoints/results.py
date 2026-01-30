@@ -246,14 +246,13 @@ if __name__ == "__main__":
     from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultDataset
     from airo_dataset_tools.data_parsers.coco import CocoKeypointsDataset
     import json
-    from few_shot_keypoints.paths import DSD_MUGS_TEST_JSON, DSD_SHOE_TEST_JSON
+    from few_shot_keypoints.paths import DSD_MUGS_TEST_JSON, DSD_SHOE_TEST_JSON, KIL_MUGS_V2_INITIAL_JSON
 
-    coco_json = "/home/tlips/Code/few-shot-keypoints/data/SPair-71k/SPAIR_coco_bicycle_test.json"
-    coco_results_json = "/home/tlips/Code/few-shot-keypoints/test.json"
+    coco_results_json = "/home/tlips/Code/few-shot-keypoints/test_crop_matching.json"
     # coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/SPAIR-support-sets/dino/aeroplane/1/resize_2028_results.json"
     # coco_json = "/home/tlips/Code/few-shot-keypoints/data/aRTF/tshirts-test_resized_512x256/tshirts-test.json"
     # coco_results_json = "/home/tlips/Code/few-shot-keypoints/results/aRTF-support-sets/dift/tshirt/1/resize_2025_results.json"
-    coco_json = DSD_SHOE_TEST_JSON
+    coco_json = KIL_MUGS_V2_INITIAL_JSON
     with open(coco_results_json, "r") as f:
         coco_results_dataset = CocoKeypointsResultDataset(json.load(f))
     
