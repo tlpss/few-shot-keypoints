@@ -1,15 +1,8 @@
-# load coco dataset 
-# take keypoint prediction method.
-# for each image in the dataset:
-#   1. Take the bbox/mask of the object
-#   2. Add Margin to bbox
-#   3. Crop around the mask
-#   4. Pad crop to match target aspect ratio (using REPLICATE/Edge padding)
-#   5. Resize to target size (e.g. 256x256)
-#   6. Calculate the keypoints in the cropped space
-#   7. Transform keypoints back to original image coordinates
-# save results in a coco results dataset
+"""
+dataset matching using object crops.
 
+contains duplicate code from the dataset_matching.py.. should refactor them to have cropping as optional transform.
+"""
 import random
 from typing import Callable, List, Tuple, Optional
 from dataclasses import dataclass

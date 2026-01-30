@@ -20,7 +20,7 @@ class ViTFeaturizer(BaseFeaturizer):
     def __init__(self, hf_model_name: str = "facebook/dinov2-small", layers: list[int] = [-1], 
     layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
     device: str = 'cuda'):
-        self.model = AutoModel.from_pretrained(hf_model_name)
+        self.model = AutoModel.from_pretrained(hf_model_name, dtype=torch.bfloat16)
         self.model.eval()
         self.model.to(device)
         # self.processor = AutoImageProcessor.from_pretrained(hf_model_name)
@@ -59,9 +59,10 @@ class ViTFeaturizer(BaseFeaturizer):
     def forward(self, images: torch.Tensor):
         assert len(images.shape) == 4 # [BATCH_SIZE, 3, IMG_HEIGHT, IMG_WIDTH]
 
-        # model uses embedding inerpolation to deal with different image sizes!
-        outputs = self.model(pixel_values=images, output_hidden_states=True)
-        hidden_states = outputs.hidden_states # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES, HIDDEN_SIZE]
+        with torch.autocast(device_type=self.model.device.type, dtype=torch.bfloat16):
+            # model uses embedding inerpolation to deal with different image sizes!
+            outputs = self.model(pixel_values=images, output_hidden_states=True)
+            hidden_states = outputs.hidden_states # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES, HIDDEN_SIZE]
         # drop class token and reshape to 2D
         hidden_states = [hidden_states[i][:,1:,:] for i in range(len(hidden_states))] # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES, HIDDEN_SIZE]
         hidden_states = self.arrange_tokens_in_grid(hidden_states,width=images.shape[3],height=images.shape[2]) # [N_ATTN_LAYERS, BATCH_SIZE, N_PATCHES_HEIGHT, N_PATCHES_WIDTH, HIDDEN_SIZE]
@@ -162,7 +163,7 @@ class RADIOv2Featurizer(ViTFeaturizer):
     def __init__(self, hf_model_name: str = "nvidia/C-RADIOv2-B", layers: list[int] = [-1], 
     layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator,
     device: str = 'cuda'):
-        self.model = AutoModel.from_pretrained(hf_model_name, trust_remote_code=True)
+        self.model = AutoModel.from_pretrained(hf_model_name, trust_remote_code=True, dtype=torch.bfloat16)
         self.model.eval()
         self.model.to(device)
         # self.processor = AutoImageProcessor.from_pretrained(hf_model_name)
@@ -180,14 +181,15 @@ class RADIOv2Featurizer(ViTFeaturizer):
         assert images.shape[1] == 3
         # https://huggingface.co/nvidia/C-RADIOv2-B/blob/main/radio_model.py
 
-        spatial_features = self.model.model.forward_intermediates(
-            images,
-            indices=self.layers,
-            intermediates_only=True,
-            aggregation="sparse"
+        with torch.autocast(device_type=self.model.device.type, dtype=torch.bfloat16):
+            spatial_features = self.model.model.forward_intermediates(
+                images,
+                indices=self.layers,
+                intermediates_only=True,
+                aggregation="sparse"
 
-            )        # output is in BCHW, no need to arrange in grid
-        features =  self.layer_aggregator(spatial_features)
+                )        # output is in BCHW, no need to arrange in grid
+            features =  self.layer_aggregator(spatial_features)
         # convert to BHWC
         features = features.permute(0,2,3,1)
         return features
@@ -210,10 +212,22 @@ class RADIOv2LargeFeaturizer(RADIOv2Featurizer):
 class RADIOv2HugeFeaturizer(RADIOv2Featurizer):
     model_name = "nvidia/C-RADIOv2-H"
     def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
+        super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device, trust_remote_code=True)
+
+@FeaturizerRegistry.register("radiov3-b")
+class RADIOv3BaseFeaturizer(RADIOv2Featurizer):
+    model_name = "nvidia/C-RADIOv3-B"
+    def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
+        super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
+
+@FeaturizerRegistry.register("radiov3-l")
+class RADIOv3LargeFeaturizer(RADIOv2Featurizer):
+    model_name = "nvidia/C-RADIOv3-L"
+    def __init__(self, layers: list[int] = [-1], layer_aggregator: Callable[[list[torch.Tensor]], torch.Tensor] = concatentation_aggregator, device: str = 'cuda'):
         super().__init__(hf_model_name=self.model_name, layers=layers, layer_aggregator=layer_aggregator, device=device)
 
 if __name__ == "__main__":
-    featurizer = RADIOv2Featurizer()
+    featurizer = RADIOv3BaseFeaturizer()
     url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
     image = Image.open(requests.get(url, stream=True).raw)
     image = image.resize((512,512))
@@ -223,4 +237,14 @@ if __name__ == "__main__":
     image = image.to(featurizer.device)
     print(image.shape)
     # convert to torch tensor
+
+    # warmup on random image
+    for _ in range(10):
+        image = torch.randn(1,3,512,512)
+        featurizer.extract_features(image)
+
+    import time
+    start_time = time.time()
     print(featurizer.extract_features(image).shape) 
+    end_time = time.time()
+    print(f"Time taken: {end_time - start_time} seconds")
