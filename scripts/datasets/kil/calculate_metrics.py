@@ -14,6 +14,8 @@ from few_shot_keypoints.paths import (
     KIL_SHOE_V3_INITIAL_JSON,
     KIL_MUGS_V2_INITIAL_JSON,
     KIL_MUGS_V3_INITIAL_JSON,
+    KIL_PEN_V1_INITIAL_JSON,
+    KIL_MOUSE_V1_INITIAL_JSON,
 )
 from few_shot_keypoints.results import (
     match_keypoints,
@@ -32,6 +34,8 @@ CATEGORY_TEST_PATHS = {
     "shoe-v3-initial-frames": str(KIL_SHOE_V3_INITIAL_JSON),
     "mug-v2-initial-frames": str(KIL_MUGS_V2_INITIAL_JSON),
     "mug-v3-initial-frames": str(KIL_MUGS_V3_INITIAL_JSON),
+    "pen-v1-initial-frames": str(KIL_PEN_V1_INITIAL_JSON),
+    "mouse-v1-initial-frames": str(KIL_MOUSE_V1_INITIAL_JSON),
 }
 
 def main(data_dir: str):

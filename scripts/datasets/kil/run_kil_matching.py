@@ -13,6 +13,8 @@ from few_shot_keypoints.paths import (
     KIL_SHOE_V3_INITIAL_JSON,
     KIL_MUGS_V2_INITIAL_JSON,
     KIL_MUGS_V3_INITIAL_JSON,
+    KIL_PEN_V1_INITIAL_JSON,
+    KIL_MOUSE_V1_INITIAL_JSON,
 )
 from scripts.match_dataset import Config, match_dataset
 from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
@@ -34,6 +36,14 @@ DATASETS = {
     "mug-v3-initial-frames": {
         "train": str(KIL_MUGS_V3_INITIAL_JSON),
         "test": str(KIL_MUGS_V3_INITIAL_JSON),
+    },
+    "pen-v1-initial-frames": {
+        "train": str(KIL_PEN_V1_INITIAL_JSON),
+        "test": str(KIL_PEN_V1_INITIAL_JSON),
+    },
+    "mouse-v1-initial-frames": {
+        "train": str(KIL_MOUSE_V1_INITIAL_JSON),
+        "test": str(KIL_MOUSE_V1_INITIAL_JSON),
     },
 }
 
@@ -108,4 +118,6 @@ def main():
                     continue
 
 if __name__ == "__main__":
+    # env variable to avoid TORCH using all GPU memory
+    
     main()

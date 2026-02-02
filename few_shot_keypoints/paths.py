@@ -31,6 +31,12 @@ KIL_MUGS_V2_INITIAL_JSON = KIL_MUGS_V2_INITIAL_DIR / "annotations.with_masks.jso
 KIL_MUGS_V3_INITIAL_DIR = KIL_DIR / "1mug-v3-initial-frames"
 KIL_MUGS_V3_INITIAL_JSON = KIL_MUGS_V3_INITIAL_DIR / "annotations.with_masks.json"
 
+KIL_PEN_V1_INITIAL_DIR = KIL_DIR / "1pen-blue-v1-initial-frames"
+KIL_PEN_V1_INITIAL_JSON = KIL_PEN_V1_INITIAL_DIR / "coco.with_masks.json"
+
+KIL_MOUSE_V1_INITIAL_DIR = KIL_DIR / "1mouse-red-v1-initial-frames"
+KIL_MOUSE_V1_INITIAL_JSON = KIL_MOUSE_V1_INITIAL_DIR / "coco.with_masks.json"
+
 if __name__ == "__main__":
     print(f"{DATA_DIR=}")
     
