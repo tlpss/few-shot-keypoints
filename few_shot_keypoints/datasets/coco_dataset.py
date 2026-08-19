@@ -12,6 +12,8 @@ from torchvision.transforms import ToTensor
 from airo_dataset_tools.data_parsers.coco import CocoImage, CocoKeypointCategory, CocoKeypointsDataset
 from skimage import io
 from few_shot_keypoints.datasets.augmentations import MultiChannelKeypointsCompose
+from airo_dataset_tools.segmentation_mask_converter import BinarySegmentationMask
+import numpy as np
 
 
 class TorchCOCOKeypointsDataset:
@@ -101,14 +103,18 @@ class TorchCOCOKeypointsDataset:
         orig_bbox = self.dataset[index][2]
         orig_image_id = self.dataset[index][3]
         orig_category_id = self.dataset[index][4]
+        orig_mask = self.dataset[index][5]
+        if orig_mask is None:
+            orig_mask = np.ones((image.shape[0], image.shape[1]))
 
         original_image_size = image.shape[:2]
         if self.transform:
-            transformed = self.transform(image=image, keypoints=orig_keypoints, bbox=orig_bbox)
-            image, keypoints, bbox = transformed["image"], transformed["keypoints"], transformed["bbox"]
+            transformed = self.transform(image=image, keypoints=orig_keypoints, bbox=orig_bbox, mask=orig_mask)
+            image, keypoints, bbox, mask = transformed["image"], transformed["keypoints"], transformed["bbox"], transformed["mask"]
         else:
             keypoints = orig_keypoints
             bbox = orig_bbox
+            mask = orig_mask
 
 
         image = self.image_to_tensor_transform(image)
@@ -118,6 +124,7 @@ class TorchCOCOKeypointsDataset:
             "original_keypoints": orig_keypoints,
             "original_image_size": original_image_size,
             "bbox": bbox,
+            "mask": mask,
             "original_bbox": orig_bbox,
             "coco_image_id": orig_image_id,
             "coco_category_id": orig_category_id,
@@ -174,7 +181,13 @@ class TorchCOCOKeypointsDataset:
                     channel_idx = self.get_keypoint_channel_index(semantic_type)
                     if channel_idx > -1:
                         img_channels_keypoints[channel_idx].append(keypoint[:2])
-            dataset.append([self.coco_img_dict[img_id].file_name, img_channels_keypoints, bbox, annotation.image_id, annotation.category_id])
+
+            encoded_mask = annotation.segmentation
+            if encoded_mask is not None:
+                decoded_mask = BinarySegmentationMask.from_coco_segmentation_mask(encoded_mask,width=self.coco_img_dict[img_id].width, height=self.coco_img_dict[img_id].height).bitmap
+            else:
+                decoded_mask = None
+            dataset.append([self.coco_img_dict[img_id].file_name, img_channels_keypoints, bbox, annotation.image_id, annotation.category_id, decoded_mask])
 
         return dataset
 

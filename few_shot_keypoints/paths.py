@@ -37,6 +37,12 @@ KIL_PEN_V1_INITIAL_JSON = KIL_PEN_V1_INITIAL_DIR / "coco.with_masks.json"
 KIL_MOUSE_V1_INITIAL_DIR = KIL_DIR / "1mouse-red-v1-initial-frames"
 KIL_MOUSE_V1_INITIAL_JSON = KIL_MOUSE_V1_INITIAL_DIR / "coco.with_masks.json"
 
+KIL_SHOE_V4_SAMPLED_DIR = KIL_DIR / "1shoe-v4-sampled-frames"
+KIL_SHOE_V4_SAMPLED_JSON = KIL_SHOE_V4_SAMPLED_DIR / "annotations.with_masks.json"
+
+KIL_MUGS_V3_SAMPLED_DIR = KIL_DIR / "1mug-v3-sampled-frames"
+KIL_MUGS_V3_SAMPLED_JSON = KIL_MUGS_V3_SAMPLED_DIR / "annotations.with_masks.json"
+
 if __name__ == "__main__":
     print(f"{DATA_DIR=}")
     

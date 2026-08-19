@@ -6,10 +6,16 @@ class CocoKeypointsResultAnnotation(CocoInstanceAnnotation):
     keypoints: List[float]
     score: float # overall confidence, required by the COCO format.
     keypoint_scores: Optional[List[float]] = None # additional, optional field to store the confidence of the keypoints separately.
-
+    # additional, optional field to store all top-k matches of each keypoint channel, as [u,v,score] triplets,
+    # ordered from best to worst match. COCO only allows a single keypoint per category, so the `keypoints` field
+    # always contains the best match of each channel. Only relevant if the matcher was configured with top_k > 1.
+    keypoint_topk_matches: Optional[List[List[List[float]]]] = None
+    category_id: int
+    image_id: int
 
 class CocoKeypointsResultDataset(RootModel[List[CocoKeypointsResultAnnotation]]):
-    pass 
+    def __getitem__(self, index):
+        return self.root[index]
 
 
 if __name__ == "__main__":
