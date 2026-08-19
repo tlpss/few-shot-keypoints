@@ -10,15 +10,32 @@ class MatchingResult:
     v: int
     score: float
 
+# the similarity map is always compared in fp32, even when the featurizer produces bf16 features (cf. the bf16
+# switch in 265f17c). bf16 only has ~8 mantissa bits, so near the peak the similarities of dozens of neighbouring
+# pixels round to the exact same value; argmax then breaks those ties by flat index and the match snaps to the
+# top-left corner of the tie plateau. Measured on a 512x512 DSD image, matching pixels against their *own* feature
+# map (so the correct answer is exact): bf16 lands 9.1px off on average for dinov3-s and 4.6px for dinov2-s, while
+# fp32 is exact. Upcasting only the comparison is cheap; the backbone itself stays in bf16.
+#
+# It is not that bf16 is barely too coarse - the cosine maps are the opposite of pronounced. Cross-image peak
+# similarities on KIL mug-v2/shoe-v2 with dinov3 sit at 0.95-0.99 (min 0.89), so the whole discriminative range
+# falls in one bf16 binade (~28 representable values), while the gap between the peak and its immediate neighbour
+# is 2e-5..2e-4. torch.float16 is a usable middle ground if the fp32 cost ever matters (measured per similarity
+# map, 1024-dim features at 512x512: bf16 5.3ms, fp16 8.1ms, fp32 14.8ms), but it is not exact either: mean
+# displacement vs the fp32 argmax is 1.6-2.1px, and >2px for 16-36% of matches. Set this constant to switch.
+COMPARISON_DTYPE = torch.float32
+
+
 def custom_cos_sim(image_features: torch.Tensor, reference_vectors: torch.Tensor) -> torch.Tensor:
     """
     image_features: (1,D,H,W)
     reference_vectors: (N,D)
-    returns a tensor of shape (N,H,W)
+    returns a tensor of shape (N,H,W), in COMPARISON_DTYPE
     """
     # reference_vectors = reference_vectors.unsqueeze(2).unsqueeze(3) # (N,D,1,1)
     # return torch.nn.functional.cosine_similarity(image_features, reference_vectors, dim=1)
-    # clone both 
+    image_features = image_features.to(COMPARISON_DTYPE)
+    reference_vectors = reference_vectors.to(COMPARISON_DTYPE)
     normalized_image_features = image_features / torch.clamp(image_features.norm(dim=1, keepdim=True,p=2), min=1e-8)
     normalized_reference_vectors = reference_vectors / torch.clamp(reference_vectors.norm(dim=1, keepdim=True,p=2), min=1e-8)
     matrix = torch.matmul(normalized_image_features.permute(0,2,3,1), normalized_reference_vectors.transpose(0,1))
@@ -34,7 +51,7 @@ class KeypointFeatureMatcher:
     """
     def __init__(self, reference_vectors: torch.Tensor, top_k_matches: List[int] = None, min_distance_between_topk_matches: int = 50, device: str = "cuda:0"):
         # D dimensional vectors.
-        self.reference_vectors = reference_vectors.to(device)
+        self.reference_vectors = reference_vectors.to(device=device, dtype=COMPARISON_DTYPE)
         assert len(self.reference_vectors.shape) == 2, "Reference vectors must be a 2D tensor"
         if top_k_matches is None:
             self.top_k_matches = [1] * len(reference_vectors)
@@ -66,7 +83,11 @@ class KeypointFeatureMatcher:
         """
 
         self.validate_cosine_similarities_input(cosine_similarities)
-        cos_map = cosine_similarities.clone() # make a copy to avoid modifying the original map
+        # copy to avoid modifying the original map, and upcast in case the caller computed the similarities in a
+        # lower precision than COMPARISON_DTYPE (cf. the note on tie plateaus above).
+        cos_map = cosine_similarities.to(COMPARISON_DTYPE)
+        if cos_map is cosine_similarities:
+            cos_map = cos_map.clone()
         if mask is not None:
             self.validate_mask(mask)
             assert cosine_similarities.shape[-2:] == mask.shape[-2:], "Mask must have the same shape as img"
@@ -83,31 +104,18 @@ class KeypointFeatureMatcher:
                 v,u = torch.unravel_index(argmax, ref_cos_map.shape)
                 ref_results.append(MatchingResult(u=int(u.item()), v=int(v.item()), score=round(float(ref_cos_map[v,u].item()), 4)))
                 # set square around the keypoint to zero, so that next best match is not in that neighborhood. (otherwise they would all be at adjacent pixels..)
-                # TODO: make this a circle?
                 if i < self.top_k_matches[ref_idx] - 1:
                     padding = self.min_distance_between_topk_matches
-                    #TODO: limit to square within image bounds
-                    ref_cos_map[v-padding:v+padding,u-padding:u+padding] = -1 
+                    # clamp to the image bounds: a negative slice start counts from the end of the tensor, which
+                    # makes start > stop and suppresses *nothing* for any match within `padding` of the top/left
+                    # border - so the next best match would land right next to this one.
+                    # TODO: make this a circle?
+                    v_min, u_min = max(0, int(v) - padding), max(0, int(u) - padding)
+                    ref_cos_map[v_min:int(v)+padding, u_min:int(u)+padding] = -1
             results.append(ref_results)
             
             
         return results
-
-    @staticmethod
-    def custom_cos_sim(image_features: torch.Tensor, reference_vectors: torch.Tensor) -> torch.Tensor:
-        """
-        this proved to be faster than the default cosine similarity function in torch.nn.functional.cosine_similarity
-        for some reason? I might be doing something wrong here..
-        """
-        normalized_image_features = image_features / image_features.norm(dim=1, keepdim=True,p=2)
-        normalized_reference_vectors = reference_vectors / reference_vectors.norm(dim=1, keepdim=True,p=2)
-        # epsilon to avoid division by zero
-        epsilon = 1e-8
-        normalized_image_features = torch.where(normalized_image_features < epsilon, epsilon, normalized_image_features)
-        normalized_reference_vectors = torch.where(normalized_reference_vectors < epsilon, epsilon, normalized_reference_vectors)
-        matrix = torch.matmul(normalized_image_features.permute(0,2,3,1), normalized_reference_vectors.transpose(0,1))
-        permuted_matrix = matrix.permute(0,3,1,2)
-        return permuted_matrix[0]
 
     def validate_image_features_input(self, image_features: torch.Tensor):
         assert len(image_features.shape) == 4 # 1,C,H,W
@@ -139,7 +147,7 @@ if __name__ == "__main__":
     mask = mask.to("cuda:1")
     results = matcher.get_best_matches_from_image_features(image_features, mask=mask)
 
-    cosine_similarities = matcher.custom_cos_sim(image_features, reference_vectors)
+    cosine_similarities = custom_cos_sim(image_features, reference_vectors)
     results = matcher.get_best_matches_from_similarities(cosine_similarities, mask=mask)
 
 

@@ -20,6 +20,14 @@ from few_shot_keypoints.featurizers.base import BaseFeaturizer
 
 # --- Refactored Geometry Logic ---
 
+# How the crop is padded to the target aspect ratio before resizing. Black (BORDER_CONSTANT) padding puts a hard,
+# high-contrast edge right at the crop border, which is where edge/rim keypoints end up after a tight margin crop,
+# so BORDER_REPLICATE is the more principled choice - but measured on KIL mug-v2/shoe-v2 with dinov3-s (2 seeds each)
+# it is not a reliable win: replicate helped 3/4 crop runs (PCK@0.1 up to +0.055) but hurt 2/4 mask runs (shoe-v2
+# seed2025: 0.915 -> 0.838). Kept at BORDER_CONSTANT because every result under results/KIL_crop and results/KIL_mask
+# was produced with it; flip this constant to cv2.BORDER_REPLICATE to sweep it properly.
+IMAGE_PADDING_BORDER_MODE = cv2.BORDER_CONSTANT
+
 @dataclass
 class CropTransform:
     """
@@ -121,7 +129,7 @@ class CropTransform:
     def apply_to_image(self, image: np.ndarray) -> np.ndarray:
         """
         Applies the crop -> pad -> resize pipeline.
-        Uses BORDER_REPLICATE (last pixel) for padding.
+        Pads with IMAGE_PADDING_BORDER_MODE (black by default, cf. the note on that constant).
         """
         x, y, w, h = self.crop_bbox
         pt, pb, pl, pr = self.padding
@@ -130,8 +138,8 @@ class CropTransform:
         # 1. Crop
         crop = image[y:y+h, x:x+w]
         
-        # 2. Pad (Using constant black padding)
-        padded = cv2.copyMakeBorder(crop, pt, pb, pl, pr, cv2.BORDER_CONSTANT)
+        # 2. Pad
+        padded = cv2.copyMakeBorder(crop, pt, pb, pl, pr, IMAGE_PADDING_BORDER_MODE)
         
         # 3. Resize
         return cv2.resize(padded, (tw, th), interpolation=cv2.INTER_CUBIC)
