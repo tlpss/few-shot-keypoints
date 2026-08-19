@@ -6,13 +6,57 @@
 # save results in a new coco dataset
 
 import random
-from typing import Callable, List
+from typing import Callable, List, Optional, Tuple
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
 from tqdm import tqdm
 from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultAnnotation, CocoKeypointsResultDataset
-from few_shot_keypoints.matcher import KeypointFeatureMatcher
+from few_shot_keypoints.matcher import KeypointFeatureMatcher, MatchingResult
 from few_shot_keypoints.featurizers.base import BaseFeaturizer
 import torch
+
+
+def matches_to_coco_keypoints(
+    results: List[List[MatchingResult]],
+    point_mapper: Optional[Callable[[float, float], Tuple[float, float]]] = None,
+) -> Tuple[List[float], List[float], List[List[List[float]]]]:
+    """Convert the matches of the KeypointFeatureMatcher to the COCO keypoint result fields.
+
+    Args:
+        results: for each keypoint channel, the matches ordered from best to worst
+            (a channel can have more than one match if the matcher was created with top_k > 1).
+        point_mapper: optional callable to map a matched (u,v) back to the original image frame.
+
+    Returns:
+        (flattened_keypoints, scores, topk_matches):
+        - flattened_keypoints: [u,v,visibility] triplets of the *best* match of each channel, as COCO
+          only allows a single keypoint per channel. (0,0,0) if a channel has no match.
+        - scores: the score of the best match of each channel that has a match.
+        - topk_matches: for each channel, all its matches as [u,v,score] triplets.
+    """
+    flattened_keypoints = []
+    scores = []
+    topk_matches = []
+
+    for channel_results in results:
+        if not channel_results or channel_results[0].u is None or channel_results[0].v is None:
+            flattened_keypoints.extend([0, 0, 0])
+            topk_matches.append([])
+            continue
+
+        channel_matches = []
+        for match in channel_results:
+            u, v = match.u, match.v
+            if point_mapper is not None:
+                u, v = point_mapper(u, v)
+            channel_matches.append([u, v, match.score])
+
+        u, v, score = channel_matches[0]
+        flattened_keypoints.extend([u, v, 2])  # 2 = visible
+        scores.append(score)
+        topk_matches.append(channel_matches)
+
+    return flattened_keypoints, scores, topk_matches
+
 
 def run_coco_dataset_inference(
     coco_dataset: TorchCOCOKeypointsDataset,
@@ -37,30 +81,13 @@ def run_coco_dataset_inference(
         features = feature_extractor.extract_features(image)
         results = keypoint_matcher.get_best_matches_from_image_features(features)
 
-        keypoints = []
-        visibilities = []
-        scores = []
-        for result_list in results:
-            if len(result_list) > 0 and result_list[0].u is not None and result_list[0].v is not None:
-                assert len(result_list) == 1, "Expected only 1 match for each keypoint category."
-                # COCO can only have 1 keypoint per category. 
-                result = result_list[0]
-                keypoints.append((result.u, result.v))
-                visibilities.append(2)
-                scores.append(result.score)
-            else:
-                keypoints.append((0, 0))
-                visibilities.append(0)
-
+        # revert the dataset transform to get the keypoints back in the original image frame.
+        point_mapper = None
         if transform_reverter is not None:
-            keypoints = transform_reverter(
-                keypoints, datapoint["original_image_size"], image.shape[2:]
-            )
-        flattened_keypoints = []
-        for kp, vis in zip(keypoints, visibilities):
-            flattened_keypoints.append(kp[0])
-            flattened_keypoints.append(kp[1])
-            flattened_keypoints.append(vis)
+            def point_mapper(u, v):
+                return transform_reverter([(u, v)], datapoint["original_image_size"], image.shape[2:])[0]
+
+        flattened_keypoints, scores, topk_matches = matches_to_coco_keypoints(results, point_mapper)
 
         coco_image_id = datapoint["coco_image_id"]
         coco_category_id = datapoint["coco_category_id"]
@@ -71,8 +98,9 @@ def run_coco_dataset_inference(
                 category_id=coco_category_id,
                 bbox=datapoint["bbox"],
                 keypoints=flattened_keypoints,
-                score=sum(scores) / len(scores),
+                score=sum(scores) / len(scores) if scores else 0.0,
                 keypoint_scores=scores,
+                keypoint_topk_matches=topk_matches,
             )
         )
         # print(f"image {coco_image_id} predicted keypoints: {keypoints}, ground truth keypoints: {datapoint['keypoints']}")

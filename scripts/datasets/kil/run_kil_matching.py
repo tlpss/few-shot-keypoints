@@ -15,6 +15,8 @@ from few_shot_keypoints.paths import (
     KIL_MUGS_V3_INITIAL_JSON,
     KIL_PEN_V1_INITIAL_JSON,
     KIL_MOUSE_V1_INITIAL_JSON,
+    KIL_SHOE_V4_SAMPLED_JSON,
+    KIL_MUGS_V3_SAMPLED_JSON,
 )
 from scripts.match_dataset import Config, match_dataset
 from few_shot_keypoints.featurizers.registry import FeaturizerRegistry
@@ -45,6 +47,14 @@ DATASETS = {
         "train": str(KIL_MOUSE_V1_INITIAL_JSON),
         "test": str(KIL_MOUSE_V1_INITIAL_JSON),
     },
+    "shoe-v4-sampled-frames": {
+        "train": str(KIL_SHOE_V2_INITIAL_JSON),
+        "test": str(KIL_SHOE_V4_SAMPLED_JSON),
+    },
+    "mug-v3-sampled-frames": {
+        "train": str(KIL_MUGS_V3_INITIAL_JSON),
+        "test": str(KIL_MUGS_V3_SAMPLED_JSON),
+    },
 }
 
 # Featurizers to test
@@ -59,7 +69,7 @@ FEATURIZERS = [
     "dinov3-h",
 
     "dinov2-s-paper",
-    "dino-paper",
+    "dino-paper", # requires PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True 
 
     "radiov2-b",
     "radiov2-l",

@@ -14,6 +14,7 @@ from skimage import io
 
 from few_shot_keypoints.datasets.coco_dataset import TorchCOCOKeypointsDataset
 from few_shot_keypoints.datasets.data_parsers import CocoKeypointsResultAnnotation, CocoKeypointsResultDataset
+from few_shot_keypoints.dataset_matching import matches_to_coco_keypoints
 from few_shot_keypoints.matcher import KeypointFeatureMatcher
 from few_shot_keypoints.featurizers.base import BaseFeaturizer
 
@@ -129,11 +130,24 @@ class CropTransform:
         # 1. Crop
         crop = image[y:y+h, x:x+w]
         
-        # 2. Pad (Replicate last pixel instead of black)
+        # 2. Pad (Using constant black padding)
         padded = cv2.copyMakeBorder(crop, pt, pb, pl, pr, cv2.BORDER_CONSTANT)
         
         # 3. Resize
         return cv2.resize(padded, (tw, th), interpolation=cv2.INTER_CUBIC)
+
+    def apply_to_mask(self, mask: np.ndarray) -> np.ndarray:
+        """
+        Applies the same crop -> pad -> resize pipeline as `apply_to_image` to a binary mask.
+        Uses nearest neighbour interpolation and zero padding (padding is background), so the mask stays binary.
+        """
+        x, y, w, h = self.crop_bbox
+        pt, pb, pl, pr = self.padding
+        th, tw = self.target_size
+
+        crop = mask[y:y+h, x:x+w]
+        padded = cv2.copyMakeBorder(crop, pt, pb, pl, pr, cv2.BORDER_CONSTANT, value=0)
+        return cv2.resize(padded, (tw, th), interpolation=cv2.INTER_NEAREST)
 
     def to_original_point(self, u_crop: float, v_crop: float) -> Tuple[float, float]:
         """
@@ -178,16 +192,17 @@ def run_coco_dataset_inference(
         datapoint = coco_dataset[i]
         
         # 1. Load Data
-        image_path = coco_dataset.dataset_dir_path / coco_dataset.dataset[i][0]
-        original_image = io.imread(image_path)
-        if original_image.shape[2] == 4:
-            original_image = original_image[..., :3]
-        
+        image = datapoint["image"]
+        bbox = datapoint["bbox"]
+
+
+        image = image.permute(1, 2, 0).numpy()
+
         # 2. Initialize Transform with Margin
         try:
             transform = CropTransform.from_bbox(
-                original_image.shape, 
-                datapoint["original_bbox"], 
+                image.shape, 
+                bbox, 
                 crop_target_size,
                 margin_scale=margin_scale
             )
@@ -196,35 +211,23 @@ def run_coco_dataset_inference(
             continue
             
         # 3. Process Image
-        processed_image = transform.apply_to_image(original_image)
+        processed_image = transform.apply_to_image(image)
 
         # cv2.imwrite(f"cropped_image.png", processed_image)
         # input("Press Enter to continue...")
         
         # 4. Extract Features
-        # HWC -> CHW, Normalize
-        image_tensor = torch.from_numpy(processed_image).permute(2, 0, 1).float() / 255.0
+        # HWC -> CHW, already in [0,1] range.
+        image_tensor = torch.from_numpy(processed_image).permute(2, 0, 1)
         image_tensor = image_tensor.unsqueeze(0)
         
         features = feature_extractor.extract_features(image_tensor)
         results = keypoint_matcher.get_best_matches_from_image_features(features)
 
         # 5. Process Results & Transform coordinates back
-        flattened_keypoints = []
-        scores = []
-        
-        for result_list in results:
-            if result_list and result_list[0].u is not None:
-                assert len(result_list) == 1, "Expected only 1 match per category."
-                res = result_list[0]
-                
-                # Transform back to original coordinates
-                u_orig, v_orig = transform.to_original_point(res.u, res.v)
-                
-                flattened_keypoints.extend([u_orig, v_orig, 2]) # 2 = visible
-                scores.append(res.score)
-            else:
-                flattened_keypoints.extend([0, 0, 0])
+        flattened_keypoints, scores, topk_matches = matches_to_coco_keypoints(
+            results, point_mapper=transform.to_original_point
+        )
 
         coco_results_annotations.append(
             CocoKeypointsResultAnnotation(
@@ -235,6 +238,7 @@ def run_coco_dataset_inference(
                 keypoints=flattened_keypoints,
                 score=sum(scores) / len(scores) if scores else 0.0,
                 keypoint_scores=scores,
+                keypoint_topk_matches=topk_matches,
             )
         )
 
@@ -259,28 +263,30 @@ def populate_matcher_w_random_references(
         idx = rng.randint(0, len(coco_dataset) - 1)
         
         # Load Data
-        image_path = coco_dataset.dataset_dir_path / coco_dataset.dataset[idx][0]
-        original_image = io.imread(image_path)
-        if original_image.shape[2] == 4:
-            original_image = original_image[..., :3]
-        
-        bbox = coco_dataset.dataset[idx][2]
-        keypoints = coco_dataset.dataset[idx][1]
-        
+        print(f"sampling random image {idx}")
+        datapoint = coco_dataset[idx]
+        image = datapoint["image"]
+        bbox = datapoint["bbox"]
+        keypoints = datapoint["keypoints"]
+        image = np.array(image.permute(1, 2, 0))
+        print(keypoints)
+       
         # Initialize Transform with Margin
         try:
             transform = CropTransform.from_bbox(
-                original_image.shape, 
+                image.shape,
                 bbox, 
                 crop_target_size,
                 margin_scale=margin_scale
             )
-        except ValueError:
+        except ValueError as e:
+            print(f"Skipping image {idx} due to error: {e}")
             continue
             
         # Process Image & Features
-        processed_image = transform.apply_to_image(original_image)
-        image_tensor = torch.from_numpy(processed_image).permute(2, 0, 1).float() / 255.0
+        processed_image = transform.apply_to_image(image)
+        # HWC -> CHW, already in [0,1] range (no /255.0 needed)
+        image_tensor = torch.from_numpy(processed_image).permute(2, 0, 1)
         features = feature_extractor.extract_features(image_tensor.unsqueeze(0))
         
         # Extract Vectors for known keypoints in this image
@@ -309,6 +315,16 @@ if __name__ == "__main__":
     from few_shot_keypoints.paths import KIL_MUGS_V2_INITIAL_JSON
 
     coco_json_path = KIL_MUGS_V2_INITIAL_JSON
+
+
+    # test the crop transform
+    image = np.random.randint(0, 255, (256, 256, 3)).astype(np.uint8)
+    transform = CropTransform.from_bbox(image.shape, [0, 0, 150, 150], (256, 256))
+    cropped_image = transform.apply_to_image(image)
+    cropped_points = ([0, 0], [25, 65])
+    original_points = [transform.to_original_point(u, v) for u, v in cropped_points]
+    print(f"{original_points=}, {cropped_points=}")
+
 
     with open(coco_json_path, "r") as f:
         coco_dataset_parser = CocoParser(**json.load(f))
